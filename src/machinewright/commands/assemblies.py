@@ -1,13 +1,13 @@
 import typer
 
-from cad.commands import ui
+from machinewright.commands import ui
 
 assemblies = typer.Typer()
 
 
 @assemblies.command("list", help="List all registered CAD assemblies")
 def list_assemblies():
-    from cad.registry import registry
+    from machinewright.registry import registry
 
     assemblies = registry().get("assemblies", {})
     ui.print_table(

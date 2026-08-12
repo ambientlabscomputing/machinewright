@@ -1,13 +1,13 @@
 import typer
 
-from cad.commands import ui
+from machinewright.commands import ui
 
 objects = typer.Typer()
 
 
 @objects.command("list", help="List all registered CAD objects")
 def list_objects():
-    from cad.registry import registry
+    from machinewright.registry import registry
 
     objects = registry().get("objects", {})
     ui.print_table(

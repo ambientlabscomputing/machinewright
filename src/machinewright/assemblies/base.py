@@ -2,7 +2,7 @@ from abc import abstractmethod
 
 import cadquery
 
-from cad.lib.cadq.exportable import Exportable
+from machinewright.lib.cadq.exportable import Exportable
 
 
 def _explode_assembly(

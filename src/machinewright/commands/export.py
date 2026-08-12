@@ -7,10 +7,10 @@ import cadquery
 from cadquery import exporters
 import typer
 
-from cad.assemblies.base import CADAssembly
-from cad.commands.ui import print
-from cad.lib.cadq import exports
-from cad.registry import registry
+from machinewright.assemblies.base import CADAssembly
+from machinewright.commands.ui import print
+from machinewright.lib.cadq import exports
+from machinewright.registry import registry
 
 export = typer.Typer()
 

@@ -1,8 +1,8 @@
 import typer
 
-from cad.commands.assemblies import assemblies
-from cad.commands.export import export
-from cad.commands.objects import objects
+from machinewright.commands.assemblies import assemblies
+from machinewright.commands.export import export
+from machinewright.commands.objects import objects
 
 app = typer.Typer()
 app.add_typer(export, name="export", help="Export commands")

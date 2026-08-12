@@ -1,6 +1,6 @@
 import cadquery
 
-from cad.objects.base import CADObject
+from machinewright.objects.base import CADObject
 
 
 class DowelPin(CADObject):

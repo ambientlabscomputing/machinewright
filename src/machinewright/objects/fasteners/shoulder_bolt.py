@@ -1,7 +1,7 @@
 import cadquery
 
-from cad.lib.fasteners import SHOULDER_BOLT_SPECS, ScrewSize
-from cad.objects.base import CADObject
+from machinewright.lib.fasteners import SHOULDER_BOLT_SPECS, ScrewSize
+from machinewright.objects.base import CADObject
 
 
 class ShoulderBolt(CADObject):

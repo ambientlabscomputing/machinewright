@@ -1,7 +1,7 @@
 [project]
-name = "cad"
+name = "machinewright"
 version = "0.1.0"
-description = "Add your description here"
+description = "A parametric CAD framework: composable, parametrized hardware objects and assemblies as code."
 readme = "README.md"
 authors = [
     { name = "Jose Catarino", email = "jfcatarino1@gmail.com" }

@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 import cadquery
 
-from cad.lib.cadq import exports
+from machinewright.lib.cadq import exports
 
 
 class Exportable(ABC):
