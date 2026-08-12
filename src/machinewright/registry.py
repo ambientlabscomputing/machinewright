@@ -1,40 +1,52 @@
 from functools import lru_cache
 import inspect
-from typing import Literal
+from typing import Literal, TypeVar
 
-from machinewright.objects import box
-from machinewright.objects.bearings import bearing
-from machinewright.objects.fasteners import dowel_pin, shoulder_bolt
+from machinewright.assemblies.base import CADAssembly
+from machinewright.objects.base import CADObject
 
-objects = [
-    box.Box,
-    dowel_pin.DowelPin,
-    bearing.Bearing,
-    shoulder_bolt.ShoulderBolt,
-]
-assemblies = []
+_ObjectT = TypeVar("_ObjectT", bound=CADObject)
+_AssemblyT = TypeVar("_AssemblyT", bound=CADAssembly)
+
+_OBJECTS: dict[str, type[CADObject]] = {}
+_ASSEMBLIES: dict[str, type[CADAssembly]] = {}
+
+
+def _key_for(cls: type) -> str:
+    return f"{cls.__module__}.{cls.__qualname__}"
+
+
+def register_object(cls: type[_ObjectT]) -> type[_ObjectT]:
+    _OBJECTS[_key_for(cls)] = cls
+    get_registry.cache_clear()
+    return cls
+
+
+def register_assembly(cls: type[_AssemblyT]) -> type[_AssemblyT]:
+    _ASSEMBLIES[_key_for(cls)] = cls
+    get_registry.cache_clear()
+    return cls
+
+
+def register(cls):
+    """Registers a CADObject or CADAssembly subclass, dispatching on its base."""
+    if issubclass(cls, CADAssembly):
+        return register_assembly(cls)
+    if issubclass(cls, CADObject):
+        return register_object(cls)
+    raise TypeError(f"{cls!r} is not a CADObject or CADAssembly subclass")
 
 
 def raw_registry() -> dict[str, dict]:
     """likely not what you're looking for"""
     return {
-        "objects": {
-            obj.__name__: {
-                "class": obj,
-            }
-            for obj in objects
-        },
-        "assemblies": {
-            obj.__name__: {
-                "class": obj,
-            }
-            for obj in assemblies
-        },
+        "objects": {key: {"class": cls} for key, cls in _OBJECTS.items()},
+        "assemblies": {key: {"class": cls} for key, cls in _ASSEMBLIES.items()},
     }
 
 
 @lru_cache
-def registry():
+def get_registry():
     registry_ = raw_registry()
 
     def __build_params(type_: Literal["objects", "assemblies"]):

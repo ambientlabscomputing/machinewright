@@ -1,8 +1,10 @@
 import cadquery
 
 from machinewright.objects.base import CADObject
+from machinewright.registry import register_object
 
 
+@register_object
 class Bearing(CADObject):
     """
     Simplified stand-in shape for an off-the-shelf ball/needle bearing --

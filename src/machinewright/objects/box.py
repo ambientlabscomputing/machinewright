@@ -1,8 +1,10 @@
 import cadquery
 
 from machinewright.objects.base import CADObject
+from machinewright.registry import register_object
 
 
+@register_object
 class Box(CADObject):
     def __init__(self, height: float, width: float, depth: float):
         self.height = height

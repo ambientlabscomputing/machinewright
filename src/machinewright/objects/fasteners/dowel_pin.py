@@ -1,8 +1,10 @@
 import cadquery
 
 from machinewright.objects.base import CADObject
+from machinewright.registry import register_object
 
 
+@register_object
 class DowelPin(CADObject):
     def __init__(self, diameter: float, length: float):
         self.diameter = diameter

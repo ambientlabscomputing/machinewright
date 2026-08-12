@@ -7,9 +7,9 @@ assemblies = typer.Typer()
 
 @assemblies.command("list", help="List all registered CAD assemblies")
 def list_assemblies():
-    from machinewright.registry import registry
+    from machinewright.registry import get_registry
 
-    assemblies = registry().get("assemblies", {})
+    assemblies = get_registry().get("assemblies", {})
     ui.print_table(
         data=[
             {

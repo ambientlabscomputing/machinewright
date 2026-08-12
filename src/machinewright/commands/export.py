@@ -10,7 +10,7 @@ import typer
 from machinewright.assemblies.base import CADAssembly
 from machinewright.commands.ui import print
 from machinewright.lib.cadq import exports
-from machinewright.registry import registry
+from machinewright.registry import get_registry
 
 export = typer.Typer()
 
@@ -30,19 +30,15 @@ _EXTENSION_BY_TYPE: dict[str, str] = {
 
 
 def _instantiate(identifier: str, params: str | None):
-    type_, name = identifier.split(".", 1)
-    reg = registry()
-    obj = None
-    for cls_name, data in reg[type_].items():
-        if cls_name.lower() == name.lower():
-            obj = data["class"]
-            break
-    if not obj:
+    type_, key = identifier.split(".", 1)
+    reg = get_registry()
+    data = reg.get(type_, {}).get(key)
+    if data is None:
         print(f"{identifier} not found in registry")
-        return None
+        raise typer.Exit(code=1)
 
     params_: dict = {} if params is None else json.loads(params)
-    return obj(**params_)
+    return data["class"](**params_)
 
 
 def _resolve_location(identifier: str, location: str | None, extension: str) -> str:
@@ -89,9 +85,6 @@ def export_svg(
     explode_nested: bool = False,
 ):
     inst = _instantiate(identifier, params)
-    if inst is None:
-        return None
-
     location = _resolve_location(identifier, location, "svg")
     return exports.svg(
         cad=_cad(inst, exploded, explode_spacing, explode_nested),
@@ -123,9 +116,6 @@ def export_step(
     explode_nested: bool = False,
 ):
     inst = _instantiate(identifier, params)
-    if inst is None:
-        return None
-
     location = _resolve_location(identifier, location, "step")
     return exporters.export(
         _cad(inst, exploded, explode_spacing, explode_nested),
@@ -149,9 +139,6 @@ def export_stl(
     explode_nested: bool = False,
 ):
     inst = _instantiate(identifier, params)
-    if inst is None:
-        return None
-
     location = _resolve_location(identifier, location, "stl")
     return exporters.export(
         _cad(inst, exploded, explode_spacing, explode_nested),
@@ -186,12 +173,9 @@ def export_other(
         print(
             f"Unknown export format {format!r}. Supported: {', '.join(sorted(_EXTENSION_BY_TYPE))}"
         )
-        return None
+        raise typer.Exit(code=1)
 
     inst = _instantiate(identifier, params)
-    if inst is None:
-        return None
-
     location = _resolve_location(identifier, location, _EXTENSION_BY_TYPE[format])
     return exporters.export(
         _cad(inst, exploded, explode_spacing, explode_nested),
