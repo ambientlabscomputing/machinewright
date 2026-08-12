@@ -18,10 +18,9 @@ code rather than drawn by hand.
   imported directly from their module path (e.g. `from
   machinewright.objects.fasteners.shoulder_bolt import ShoulderBolt`) —
   there's no separate re-export index to keep in sync.
-- **`registry.py`** + **`commands/`** — a CLI (`python -m
-  machinewright.main`) that discovers every registered object/assembly
-  and exports it to SVG, STEP, STL, or any other format cadquery
-  supports.
+- **`registry.py`** + **`commands/`** — the `machinewright` CLI, which
+  discovers every registered object/assembly and exports it to SVG, STEP,
+  STL, or any other format cadquery supports.
 
 ## Defining your own parts
 
@@ -56,7 +55,7 @@ Registered classes are keyed by their fully-qualified dotted path, so
 ## Usage
 
 ```bash
-python -m machinewright.main objects list
-python -m machinewright.main assemblies list
-python -m machinewright.main export step "objects.machinewright.objects.fasteners.shoulder_bolt.ShoulderBolt" --params '{"thread_size":"M3","shoulder_diameter":4,"shoulder_length":12,"thread_length":3}' --location out.step
+machinewright objects list
+machinewright assemblies list
+machinewright export step "objects.machinewright.objects.fasteners.shoulder_bolt.ShoulderBolt" --params '{"thread_size":"M3","shoulder_diameter":4,"shoulder_length":12,"thread_length":3}' --location out.step
 ```
