@@ -9,6 +9,7 @@ import typer
 
 from machinewright.assemblies.base import CADAssembly
 from machinewright.commands.ui import print
+from machinewright.lib.bom import write_bom_csv
 from machinewright.lib.cadq import exports
 from machinewright.lib.layout import layout_for_printing
 from machinewright.lib.materials import Process
@@ -222,6 +223,22 @@ def export_print_layout(
         angularTolerance=angular_tolerance,
         opt={"ascii": ascii},
     )
+
+
+@export.command("bom", help="Export a bill of materials to CSV")
+def export_bom(
+    identifier: str,
+    location: str | None = None,
+    params: str | None = None,
+):
+    inst = _instantiate(identifier, params)
+    if not isinstance(inst, CADAssembly):
+        print(f"{identifier} is not an assembly; bom requires an assembly")
+        raise typer.Exit(code=1)
+
+    location = _resolve_location(identifier, location, "csv")
+    write_bom_csv(inst.assemble(), location)
+    return location
 
 
 @export.command(

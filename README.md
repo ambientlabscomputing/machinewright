@@ -37,6 +37,12 @@ code rather than drawn by hand.
   authored. Packing shelf-wraps into rows sized to keep the layout
   roughly square by default (pass `bed_size` to match a real printer's
   bed instead of the auto-computed size).
+- **`lib/bom.py`** — `generate_bom`/`write_bom_csv`: walks an assembly's
+  leaf parts and groups repeated instances of the same part (same class,
+  constructor params, and material) into one line item with a quantity,
+  reporting material, process, envelope dimensions, volume, mass (when
+  the material has a density), captured params, and reference names —
+  exposed as the `export bom` CLI subcommand.
 
 ## Defining your own parts
 
@@ -101,6 +107,12 @@ given a `CADAssembly`, find every part tagged for a process and pack it
 into a single exportable layout — exposed both as a Python function and
 as the `export print-layout` CLI subcommand.
 
+`attach()` also records each part's class and constructor-set attributes
+(a generic stand-in for "params", since every `CADObject` subclass sets
+`self.foo = foo` per param) as metadata, which is what `generate_bom`
+uses to group repeated parts and report their dimensions — no separate
+BOM-specific authoring step needed beyond using `attach()`.
+
 ## Usage
 
 ```bash
@@ -108,4 +120,5 @@ machinewright objects list
 machinewright assemblies list
 machinewright export step "objects.machinewright.objects.fasteners.shoulder_bolt.ShoulderBolt" --params '{"thread_size":"M3","shoulder_diameter":4,"shoulder_length":12,"thread_length":3}' --location out.step
 machinewright export print-layout "assemblies.your_project.assemblies.actuator.ActuatorAssembly" --process printed --location print_layout.stl
+machinewright export bom "assemblies.your_project.assemblies.actuator.ActuatorAssembly" --location bom.csv
 ```

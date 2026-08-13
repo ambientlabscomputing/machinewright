@@ -41,16 +41,28 @@ def attach(
     """
     Adds `part` to `assy`, wiring its .material (if set) into cadquery's
     native color/material hooks (for STEP fidelity) and into our own
-    metadata (for in-process filtering, see lib/layout.py). Use in place
-    of assy.add(part.cad(), loc=..., name=...) inside assemble().
+    metadata (for in-process filtering, see lib/layout.py, and BOM
+    generation, see lib/bom.py). Use in place of
+    assy.add(part.cad(), loc=..., name=...) inside assemble().
+
+    Metadata always records the part's fully-qualified class and its
+    instance attributes (a generic stand-in for "constructor params",
+    since every CADObject subclass sets self.foo = foo for each param) --
+    this is what lets the BOM group repeated instances of the same part
+    into one line item and report their dimensions.
     """
     kwargs: dict = {"loc": loc, "name": name}
+    metadata: dict = {
+        "part_class": f"{type(part).__module__}.{type(part).__qualname__}",
+        "part_params": {k: v for k, v in vars(part).items() if k != "material"},
+    }
     material = part.material
     if material is not None:
         kwargs["color"] = cadquery.Color(*material.color)
-        kwargs["metadata"] = {"material": material}
+        metadata["material"] = material
         if material.density is not None:
             kwargs["material"] = CQMaterial(name=material.name, density=material.density)
+    kwargs["metadata"] = metadata
     assy.add(part.cad(), **kwargs)
     return assy
 

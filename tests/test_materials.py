@@ -84,7 +84,7 @@ def test_attach_without_density_skips_native_cq_material():
     assert child.material is None
 
 
-def test_attach_with_no_material_passes_no_color_or_metadata():
+def test_attach_with_no_material_passes_no_color_or_native_cq_material():
     assy = cadquery.Assembly()
     part = _FakePart()
     assert part.material is None
@@ -92,5 +92,45 @@ def test_attach_with_no_material_passes_no_color_or_metadata():
     attach(assy, part, name="widget")
 
     child = assy.children[0]
-    assert child.metadata == {}
+    assert "material" not in child.metadata
     assert child.material is None
+
+
+def test_attach_always_records_part_class_and_params():
+    assy = cadquery.Assembly()
+    part = _FakePart()
+
+    attach(assy, part, name="widget")
+
+    child = assy.children[0]
+    assert child.metadata["part_class"] == "test_materials._FakePart"
+    assert child.metadata["part_params"] == {}
+
+
+def test_attach_records_instance_attributes_as_params():
+    class _SizedPart(CADObject):
+        def __init__(self, diameter: float, length: float):
+            self.diameter = diameter
+            self.length = length
+
+        def cad(self) -> cadquery.Workplane:
+            return cadquery.Workplane("XY").box(1, 1, 1)
+
+    assy = cadquery.Assembly()
+    part = _SizedPart(diameter=3, length=12)
+
+    attach(assy, part, name="pin")
+
+    child = assy.children[0]
+    assert child.metadata["part_params"] == {"diameter": 3, "length": 12}
+
+
+def test_attach_excludes_material_from_params():
+    assy = cadquery.Assembly()
+    part = _FakePart()
+    part.material = MATERIALS["PLA"]
+
+    attach(assy, part, name="widget")
+
+    child = assy.children[0]
+    assert "material" not in child.metadata["part_params"]
