@@ -9,22 +9,29 @@ code runs.
 import cadquery
 
 from machinewright.assemblies.base import CADAssembly
+from machinewright.lib.materials import MATERIALS, attach
 from machinewright.objects.box import Box
 from machinewright.objects.fasteners.dowel_pin import DowelPin
 
 
 class NestedPinPair(CADAssembly):
-    """Two dowel pins stacked along Z, meant to be nested inside another assembly."""
+    """
+    Two dowel pins stacked along Z, meant to be nested inside another
+    assembly. DowelPin already defaults to an off-the-shelf/purchased
+    material, so these are left as-is.
+    """
 
     def assemble(self) -> cadquery.Assembly:
         assy = cadquery.Assembly()
-        assy.add(
-            DowelPin(diameter=3, length=5).cad(),
+        attach(
+            assy,
+            DowelPin(diameter=3, length=5),
             loc=cadquery.Location(cadquery.Vector(0, 0, 0)),
             name="lower_pin",
         )
-        assy.add(
-            DowelPin(diameter=3, length=5).cad(),
+        attach(
+            assy,
+            DowelPin(diameter=3, length=5),
             loc=cadquery.Location(cadquery.Vector(0, 0, 10)),
             name="upper_pin",
         )
@@ -32,23 +39,26 @@ class NestedPinPair(CADAssembly):
 
 
 class SimpleAssembly(CADAssembly):
-    """A base plate, a nested pin-pair sub-assembly, and a top plate."""
+    """
+    A base plate and top plate (both tagged PLA/printed) sandwiching a
+    nested pin-pair sub-assembly (purchased hardware).
+    """
 
     def assemble(self) -> cadquery.Assembly:
         assy = cadquery.Assembly()
-        assy.add(
-            Box(height=2, width=20, depth=20).cad(),
-            loc=cadquery.Location(cadquery.Vector(0, 0, 0)),
-            name="base_plate",
-        )
+
+        base_plate = Box(height=2, width=20, depth=20)
+        base_plate.material = MATERIALS["PLA"]
+        attach(assy, base_plate, loc=cadquery.Location(cadquery.Vector(0, 0, 0)), name="base_plate")
+
         assy.add(
             NestedPinPair().assemble(),
             loc=cadquery.Location(cadquery.Vector(0, 0, 20)),
             name="pin_pair",
         )
-        assy.add(
-            Box(height=2, width=20, depth=20).cad(),
-            loc=cadquery.Location(cadquery.Vector(0, 0, 40)),
-            name="top_plate",
-        )
+
+        top_plate = Box(height=2, width=20, depth=20)
+        top_plate.material = MATERIALS["PLA"]
+        attach(assy, top_plate, loc=cadquery.Location(cadquery.Vector(0, 0, 40)), name="top_plate")
+
         return assy

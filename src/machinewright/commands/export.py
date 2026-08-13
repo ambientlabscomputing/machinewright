@@ -10,6 +10,8 @@ import typer
 from machinewright.assemblies.base import CADAssembly
 from machinewright.commands.ui import print
 from machinewright.lib.cadq import exports
+from machinewright.lib.layout import layout_for_printing
+from machinewright.lib.materials import Process
 from machinewright.registry import get_registry
 
 export = typer.Typer()
@@ -142,6 +144,49 @@ def export_stl(
     location = _resolve_location(identifier, location, "stl")
     return exporters.export(
         _cad(inst, exploded, explode_spacing, explode_nested),
+        location,
+        exportType=exporters.ExportTypes.STL,
+        tolerance=tolerance,
+        angularTolerance=angular_tolerance,
+        opt={"ascii": ascii},
+    )
+
+
+@export.command(
+    "print-layout",
+    help="Collect parts by process and export as a single packed layout",
+)
+def export_print_layout(
+    identifier: str,
+    location: str | None = None,
+    params: str | None = None,
+    process: Process = Process.PRINTED,
+    spacing: float = 5.0,
+    bed_width: float | None = None,
+    bed_depth: float | None = None,
+    tolerance: float = 0.1,
+    angular_tolerance: float = 0.1,
+    ascii: bool = False,
+):
+    inst = _instantiate(identifier, params)
+    if not isinstance(inst, CADAssembly):
+        print(f"{identifier} is not an assembly; print-layout requires an assembly")
+        raise typer.Exit(code=1)
+
+    bed_size = (
+        (bed_width, bed_depth) if bed_width is not None and bed_depth is not None else None
+    )
+    try:
+        cad = layout_for_printing(
+            inst.assemble(), process=process, spacing=spacing, bed_size=bed_size
+        )
+    except ValueError as e:
+        print(str(e))
+        raise typer.Exit(code=1) from e
+
+    location = _resolve_location(identifier, location, "stl")
+    return exporters.export(
+        cad,
         location,
         exportType=exporters.ExportTypes.STL,
         tolerance=tolerance,

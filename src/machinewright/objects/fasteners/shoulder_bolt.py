@@ -1,6 +1,7 @@
 import cadquery
 
 from machinewright.lib.fasteners import SHOULDER_BOLT_SPECS, ScrewSize
+from machinewright.lib.materials import MATERIALS
 from machinewright.objects.base import CADObject
 from machinewright.registry import register_object
 
@@ -22,6 +23,8 @@ class ShoulderBolt(CADObject):
     side to reach the part it supports, with the fastening happening
     right behind the head instead.
     """
+
+    material = MATERIALS["OFF_THE_SHELF"]
 
     def __init__(
         self,

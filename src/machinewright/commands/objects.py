@@ -16,6 +16,7 @@ def list_objects():
                 "Name": name,
                 "Class": data["class"].__name__,
                 "Params": ", ".join(data.get("params", {}).keys()),
+                "Material": (material.name if (material := data["class"].material) else "None"),
             }
             for name, data in objects.items()
         ]

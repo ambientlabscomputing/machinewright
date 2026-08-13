@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from collections.abc import Iterator
 
 import cadquery
 
@@ -50,6 +51,34 @@ def _explode_assembly(
             exploded.add(target, loc=new_loc, name=child.name)
 
     return exploded
+
+
+def _walk_assembly(
+    assy: cadquery.Assembly,
+    parent_loc: cadquery.Location | None = None,
+) -> Iterator[tuple[cadquery.Shape, dict, cadquery.Location, str]]:
+    """
+    Recursively walks a raw cadquery.Assembly tree, yielding
+    (shape, metadata, world_loc, name) for every leaf part. world_loc
+    composes all ancestor locations, so shape.located(world_loc) lands
+    in the same place it would appear in assy.toCompound().
+
+    Unlike _explode_assembly above, this always flattens all the way to
+    leaves -- it has no notion of treating a nested sub-assembly as one
+    rigid unit, which _explode_assembly needs for its non-nested case.
+    That's a real difference in what each walk is for, not incidental
+    duplication, so they're kept as separate functions rather than
+    sharing one parameterized walk.
+    """
+    if parent_loc is None:
+        parent_loc = cadquery.Location()
+
+    for child in assy.children:
+        world_loc = parent_loc * child.loc
+        if child.obj is not None:
+            yield child.obj.val(), dict(child.metadata), world_loc, child.name
+        else:
+            yield from _walk_assembly(child, world_loc)
 
 
 class CADAssembly(Exportable):

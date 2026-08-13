@@ -1,5 +1,6 @@
 import cadquery
 
+from machinewright.lib.materials import MATERIALS
 from machinewright.objects.base import CADObject
 from machinewright.registry import register_object
 
@@ -11,6 +12,8 @@ class Bearing(CADObject):
     used for assembly clearance checks and visualization, not as a
     manufacturable part.
     """
+
+    material = MATERIALS["OFF_THE_SHELF"]
 
     def __init__(self, outer_diameter: float, inner_diameter: float, width: float):
         self.outer_diameter = outer_diameter

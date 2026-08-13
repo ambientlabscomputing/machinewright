@@ -1,11 +1,14 @@
 import cadquery
 
+from machinewright.lib.materials import MATERIALS
 from machinewright.objects.base import CADObject
 from machinewright.registry import register_object
 
 
 @register_object
 class DowelPin(CADObject):
+    material = MATERIALS["OFF_THE_SHELF"]
+
     def __init__(self, diameter: float, length: float):
         self.diameter = diameter
         self.length = length

@@ -1,4 +1,6 @@
 from machinewright.assemblies.base import CADAssembly
+from machinewright.lib.layout import collect_by_process, layout_for_printing
+from machinewright.lib.materials import MATERIALS, Material, Process, attach
 from machinewright.objects.base import CADObject
 from machinewright.registry import (
     get_registry,
@@ -8,9 +10,15 @@ from machinewright.registry import (
 )
 
 __all__ = [
+    "MATERIALS",
     "CADAssembly",
     "CADObject",
+    "Material",
+    "Process",
+    "attach",
+    "collect_by_process",
     "get_registry",
+    "layout_for_printing",
     "register",
     "register_assembly",
     "register_object",

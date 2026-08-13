@@ -1,0 +1,137 @@
+import cadquery
+import pytest
+
+from machinewright.lib.layout import collect_by_process, layout_for_printing
+from machinewright.lib.materials import MATERIALS, Process
+
+
+def _box(width: float, depth: float, height: float, z: float = 0.0) -> cadquery.Workplane:
+    return cadquery.Workplane("XY", origin=(0, 0, z)).box(
+        width, depth, height, centered=(True, True, False)
+    )
+
+
+def _build_mixed_assembly() -> cadquery.Assembly:
+    """
+    Two PRINTED leaves (one nested inside a sub-assembly), one PURCHASED
+    leaf, one leaf with no material at all.
+    """
+    printed = MATERIALS["PLA"]
+    purchased = MATERIALS["OFF_THE_SHELF"]
+
+    sub = cadquery.Assembly()
+    sub.add(
+        _box(10, 10, 5, z=0),
+        loc=cadquery.Location(cadquery.Vector(0, 0, 0)),
+        name="nested_printed",
+        metadata={"material": printed},
+    )
+
+    parent = cadquery.Assembly()
+    parent.add(
+        _box(20, 5, 5, z=50),
+        loc=cadquery.Location(),
+        name="top_printed",
+        metadata={"material": printed},
+    )
+    parent.add(
+        _box(8, 8, 8, z=0),
+        loc=cadquery.Location(cadquery.Vector(30, 0, 0)),
+        name="purchased",
+        metadata={"material": purchased},
+    )
+    parent.add(
+        _box(5, 5, 5, z=0),
+        loc=cadquery.Location(cadquery.Vector(60, 0, 0)),
+        name="untagged",
+    )
+    parent.add(sub, loc=cadquery.Location(cadquery.Vector(0, 100, 0)), name="sub")
+
+    return parent
+
+
+def test_collect_by_process_filters_printed_only():
+    assy = _build_mixed_assembly()
+
+    shapes = collect_by_process(assy, Process.PRINTED)
+
+    assert len(shapes) == 2
+
+
+def test_collect_by_process_filters_purchased_only():
+    assy = _build_mixed_assembly()
+
+    shapes = collect_by_process(assy, Process.PURCHASED)
+
+    assert len(shapes) == 1
+
+
+def test_collect_by_process_empty_for_unused_process():
+    assy = _build_mixed_assembly()
+
+    shapes = collect_by_process(assy, Process.MACHINED)
+
+    assert shapes == []
+
+
+def test_layout_for_printing_drops_all_parts_to_z_zero():
+    assy = _build_mixed_assembly()
+
+    cad = layout_for_printing(assy, process=Process.PRINTED, spacing=5.0)
+
+    compound = cad.val()
+    for solid in compound.Solids():
+        assert solid.BoundingBox().zmin == pytest.approx(0.0)
+
+
+def _pairwise_xy_overlap(bboxes) -> bool:
+    for i, a in enumerate(bboxes):
+        for b in bboxes[i + 1 :]:
+            overlap_x = a.xmin < b.xmax and b.xmin < a.xmax
+            overlap_y = a.ymin < b.ymax and b.ymin < a.ymax
+            if overlap_x and overlap_y:
+                return True
+    return False
+
+
+def test_layout_for_printing_no_xy_overlap():
+    assy = _build_mixed_assembly()
+
+    cad = layout_for_printing(assy, process=Process.PRINTED, spacing=5.0)
+
+    bboxes = [solid.BoundingBox() for solid in cad.val().Solids()]
+    assert len(bboxes) == 2
+    assert not _pairwise_xy_overlap(bboxes)
+
+
+def test_layout_for_printing_wraps_rows_when_bed_width_is_narrow():
+    assy = cadquery.Assembly()
+    for i in range(3):
+        assy.add(
+            _box(20, 10, 5),
+            loc=cadquery.Location(cadquery.Vector(i * 100, 0, 0)),
+            name=f"part_{i}",
+            metadata={"material": MATERIALS["PLA"]},
+        )
+
+    cad = layout_for_printing(
+        assy, process=Process.PRINTED, spacing=5.0, bed_size=(45.0, 1000.0)
+    )
+
+    bboxes = [solid.BoundingBox() for solid in cad.val().Solids()]
+    y_centers = sorted({round(bbox.center.y, 3) for bbox in bboxes})
+    assert len(y_centers) >= 2
+    assert not _pairwise_xy_overlap(bboxes)
+
+
+def test_layout_for_printing_raises_when_no_parts_match():
+    assy = cadquery.Assembly()
+    assy.add(
+        _box(5, 5, 5),
+        loc=cadquery.Location(),
+        name="purchased_only",
+        metadata={"material": MATERIALS["OFF_THE_SHELF"]},
+    )
+
+    with pytest.raises(ValueError):
+        layout_for_printing(assy, process=Process.PRINTED)
