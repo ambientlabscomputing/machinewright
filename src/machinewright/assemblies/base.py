@@ -40,15 +40,22 @@ def _explode_assembly(
         pos = positions[id(child)]
         shift = axis_vec * (ranks[pos] * spacing - pos)
         new_loc = cadquery.Location(shift) * child.loc
+        # forwarded so color/material set via attach() survive the rebuild
+        # (e.g. into a STEP export of the exploded view)
+        style = {
+            "color": child.color,
+            "material": child.material,
+            "metadata": dict(child.metadata),
+        }
 
         if child.obj is None and nested:
             # recurse in child's own local frame (child.loc is applied
             # separately above, via new_loc, when adding the result)
             inner = _explode_assembly(child, spacing, axis_vec, nested=True)
-            exploded.add(inner, loc=new_loc, name=child.name)
+            exploded.add(inner, loc=new_loc, name=child.name, **style)
         else:
             target = child.obj if child.obj is not None else child
-            exploded.add(target, loc=new_loc, name=child.name)
+            exploded.add(target, loc=new_loc, name=child.name, **style)
 
     return exploded
 

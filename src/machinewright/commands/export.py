@@ -67,6 +67,14 @@ def _cad(
     return inst.cad()
 
 
+def _assemble(
+    inst: CADAssembly, exploded: bool, explode_spacing: float, explode_nested: bool
+) -> cadquery.Assembly:
+    if exploded:
+        return inst.assemble_exploded(spacing=explode_spacing, nested=explode_nested)
+    return inst.assemble()
+
+
 @export.command("svg", help="Render and export image to SVG format")
 def export_svg(
     identifier: str,
@@ -119,6 +127,20 @@ def export_step(
 ):
     inst = _instantiate(identifier, params)
     location = _resolve_location(identifier, location, "step")
+
+    if isinstance(inst, CADAssembly):
+        # Exporting the cadquery.Assembly directly (instead of going through
+        # .cad(), which flattens to one compound via toCompound()) is what
+        # lets per-part color/material -- attached via attach() -- survive
+        # into the STEP file.
+        assy = _assemble(inst, exploded, explode_spacing, explode_nested)
+        return assy.export(
+            location,
+            exportType=exporters.ExportTypes.STEP,
+            unit=unit,
+            outputUnit=output_unit,
+        )
+
     return exporters.export(
         _cad(inst, exploded, explode_spacing, explode_nested),
         location,
@@ -175,7 +197,9 @@ def export_print_layout(
         raise typer.Exit(code=1)
 
     bed_size = (
-        (bed_width, bed_depth) if bed_width is not None and bed_depth is not None else None
+        (bed_width, bed_depth)
+        if bed_width is not None and bed_depth is not None
+        else None
     )
     try:
         cad = layout_for_printing(
