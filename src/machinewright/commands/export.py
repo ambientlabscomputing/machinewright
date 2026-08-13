@@ -164,6 +164,7 @@ def export_print_layout(
     spacing: float = 5.0,
     bed_width: float | None = None,
     bed_depth: float | None = None,
+    optimize_orientation: bool = True,
     tolerance: float = 0.1,
     angular_tolerance: float = 0.1,
     ascii: bool = False,
@@ -178,7 +179,11 @@ def export_print_layout(
     )
     try:
         cad = layout_for_printing(
-            inst.assemble(), process=process, spacing=spacing, bed_size=bed_size
+            inst.assemble(),
+            process=process,
+            spacing=spacing,
+            bed_size=bed_size,
+            optimize_orientation=optimize_orientation,
         )
     except ValueError as e:
         print(str(e))

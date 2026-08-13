@@ -5,10 +5,15 @@ those parts into a single exportable layout (the concrete motivating
 case: collect everything marked PRINTED and pack it onto a print bed).
 """
 
+import math
+
 import cadquery
 
 from machinewright.assemblies.base import _walk_assembly
 from machinewright.lib.materials import Process
+
+_RESTING_FACE_EPSILON = 1e-3  # mm, tolerance for "this face is the one touching the bed"
+_DOWNWARD_NORMAL_THRESHOLD = -0.99  # dot with (0,0,-1); planar faces only, near-exact match
 
 
 def collect_by_process(assy: cadquery.Assembly, process: Process) -> list[cadquery.Shape]:
@@ -24,20 +29,61 @@ def collect_by_process(assy: cadquery.Assembly, process: Process) -> list[cadque
     ]
 
 
+def _overhang_area(shape: cadquery.Shape) -> float:
+    """
+    Sum of the areas of planar, downward-facing faces that aren't the
+    face resting on the bed (i.e. faces that would print in mid-air and
+    need support material) -- e.g. the shoulder of a counterbore facing
+    down instead of up. Curved faces are skipped: a cylinder wall's
+    normal varies across the face, so a single sampled normal can't
+    classify it as "facing down" or not.
+    """
+    zmin = shape.BoundingBox().zmin
+    total = 0.0
+    for face in shape.Faces():
+        if face.geomType() != "PLANE":
+            continue
+        if face.normalAt().z > _DOWNWARD_NORMAL_THRESHOLD:
+            continue
+        if abs(face.Center().z - zmin) < _RESTING_FACE_EPSILON:
+            continue  # this is the face resting on the bed, not an overhang
+        total += face.Area()
+    return total
+
+
+def _best_orientation(shape: cadquery.Shape) -> cadquery.Shape:
+    """
+    Tries the shape as-designed and flipped upside-down (180 deg about
+    X), and keeps whichever has less overhang area. Ties keep the
+    as-designed orientation.
+    """
+    flipped = shape.rotate((0, 0, 0), (1, 0, 0), 180)
+    return shape if _overhang_area(shape) <= _overhang_area(flipped) else flipped
+
+
 def layout_for_printing(
     assy: cadquery.Assembly,
     process: Process = Process.PRINTED,
     spacing: float = 5.0,
     bed_size: tuple[float, float] | None = None,
+    optimize_orientation: bool = True,
 ) -> cadquery.Workplane:
     """
-    Collects every part in `assy` matching `process`, drops each so its
-    bounding box sits flush on Z=0 (no rotation -- "as designed"
-    orientation is kept), and shelf-packs them into rows: sorted by
-    footprint (bounding-box X*Y) descending, placed left-to-right with
-    `spacing` between parts, wrapping to a new row when the next part
-    would exceed bed_size[0] (unbounded if bed_size is None), with rows
-    stacked along Y separated by `spacing`.
+    Collects every part in `assy` matching `process`.
+
+    If `optimize_orientation` is True (default), each part is tried both
+    as-designed and flipped upside-down, keeping whichever orientation
+    has less overhanging (unsupported) area -- see _overhang_area.
+
+    Each part is then dropped so its bounding box sits flush on Z=0, and
+    shelf-packed into rows: sorted by footprint (bounding-box X*Y)
+    descending, placed left-to-right with `spacing` between parts,
+    wrapping to a new row when the next part would exceed the target bed
+    width, with rows stacked along Y separated by `spacing`. If
+    `bed_size` isn't given, a target width is auto-computed from the
+    total footprint area to aim for a roughly square layout instead of
+    one long row -- pass `bed_size` explicitly to match a real printer's
+    bed instead.
 
     Returns a single combined Workplane -- the same shape the existing
     export commands already expect. Raises ValueError if no parts match.
@@ -45,6 +91,9 @@ def layout_for_printing(
     shapes = collect_by_process(assy, process)
     if not shapes:
         raise ValueError(f"No parts found for process {process}")
+
+    if optimize_orientation:
+        shapes = [_best_orientation(shape) for shape in shapes]
 
     dropped = []
     for shape in shapes:
@@ -56,7 +105,13 @@ def layout_for_printing(
         reverse=True,
     )
 
-    bed_width = bed_size[0] if bed_size is not None else float("inf")
+    if bed_size is not None:
+        bed_width = bed_size[0]
+    else:
+        total_area = sum(
+            shape.BoundingBox().xlen * shape.BoundingBox().ylen for shape in dropped
+        )
+        bed_width = math.sqrt(total_area) * 1.2  # margin for packing/spacing inefficiency
 
     cursor_x = 0.0
     cursor_y = 0.0
