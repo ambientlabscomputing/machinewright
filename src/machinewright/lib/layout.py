@@ -51,14 +51,41 @@ def _overhang_area(shape: cadquery.Shape) -> float:
     return total
 
 
+def _candidate_orientations(shape: cadquery.Shape) -> list[cadquery.Shape]:
+    """
+    The 6 axis-aligned "which face is down" orientations reachable from
+    `shape`'s current placement: as-is, and each 90/180/270 degree
+    rotation about the world X and Y axes needed to bring a different
+    pair of faces to the top/bottom. This matters because a part's
+    placement *in its assembly* (not just how it was authored) can leave
+    it sitting on its side -- e.g. a sub-assembly mounted 90 degrees off
+    the top-level Z axis -- which a flip-only search can never correct
+    since flipping keeps the same axis pointing down.
+    """
+    return [
+        shape,
+        shape.rotate((0, 0, 0), (1, 0, 0), 90),
+        shape.rotate((0, 0, 0), (1, 0, 0), 180),
+        shape.rotate((0, 0, 0), (1, 0, 0), 270),
+        shape.rotate((0, 0, 0), (0, 1, 0), 90),
+        shape.rotate((0, 0, 0), (0, 1, 0), 270),
+    ]
+
+
 def _best_orientation(shape: cadquery.Shape) -> cadquery.Shape:
     """
-    Tries the shape as-designed and flipped upside-down (180 deg about
-    X), and keeps whichever has less overhang area. Ties keep the
-    as-designed orientation.
+    Tries all 6 axis-aligned orientations (see _candidate_orientations)
+    and keeps whichever has the least overhang area, breaking ties by
+    the shortest bounding-box height (preferring a part lying on its
+    flattest face over one standing on edge when both happen to have
+    zero overhang). Ties on both keep the as-placed orientation, since
+    it's first in the candidate list and Python's min() is stable.
     """
-    flipped = shape.rotate((0, 0, 0), (1, 0, 0), 180)
-    return shape if _overhang_area(shape) <= _overhang_area(flipped) else flipped
+
+    def score(candidate: cadquery.Shape) -> tuple[float, float]:
+        return _overhang_area(candidate), candidate.BoundingBox().zlen
+
+    return min(_candidate_orientations(shape), key=score)
 
 
 def layout_for_printing(
@@ -71,9 +98,13 @@ def layout_for_printing(
     """
     Collects every part in `assy` matching `process`.
 
-    If `optimize_orientation` is True (default), each part is tried both
-    as-designed and flipped upside-down, keeping whichever orientation
-    has less overhanging (unsupported) area -- see _overhang_area.
+    If `optimize_orientation` is True (default), each part is tried in
+    all 6 axis-aligned orientations (see _candidate_orientations),
+    keeping whichever has the least overhanging (unsupported) area,
+    tie-broken by the shortest bounding-box height -- this both avoids
+    overhangs like a counterbore shoulder facing down, and corrects a
+    part that's sitting on its side because of how it was placed in the
+    assembly rather than lying on its flattest face.
 
     Each part is then dropped so its bounding box sits flush on Z=0, and
     shelf-packed into rows: sorted by footprint (bounding-box X*Y)

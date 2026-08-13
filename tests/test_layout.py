@@ -188,6 +188,24 @@ def test_best_orientation_keeps_already_good_orientation():
     assert _overhang_area(chosen) == pytest.approx(0.0)
 
 
+def test_best_orientation_corrects_a_part_placed_on_its_side():
+    """
+    Simulates a part whose *assembly placement* leaves it standing on
+    edge (e.g. a sub-assembly mounted 90 degrees off the top-level Z
+    axis) -- not something a flip-only search can ever fix, since
+    flipping keeps the same axis pointing down.
+    """
+    flat = _box(20, 20, 4).val()
+    assert flat.BoundingBox().zlen == pytest.approx(4.0)
+
+    sideways = flat.rotate((0, 0, 0), (1, 0, 0), 90)
+    assert sideways.BoundingBox().zlen == pytest.approx(20.0)
+
+    chosen = _best_orientation(sideways)
+
+    assert chosen.BoundingBox().zlen == pytest.approx(4.0)
+
+
 def test_layout_for_printing_optimizes_orientation_by_default():
     bad = _plate_with_cbore_facing_up().rotate((0, 0, 0), (1, 0, 0), 180)
     assy = cadquery.Assembly()

@@ -28,13 +28,15 @@ code rather than drawn by hand.
 - **`lib/layout.py`** — operations that key off material, e.g.
   `collect_by_process`/`layout_for_printing`: given an assembly, find
   every part tagged for a given process (PRINTED, MACHINED, PURCHASED,
-  ...) and pack it into a single exportable layout. For PRINTED parts,
-  each one is also tried both as-designed and flipped upside-down, keeping
-  whichever orientation has less unsupported (overhanging) area — e.g. a
-  counterbore's shoulder facing up instead of hanging in mid-air.
-  Packing shelf-wraps into rows sized to keep the layout roughly square
-  by default (pass `bed_size` to match a real printer's bed instead of
-  the auto-computed size).
+  ...) and pack it into a single exportable layout. Each part is also
+  tried in all 6 axis-aligned orientations, keeping whichever has the
+  least unsupported (overhanging) area, tie-broken by the shortest
+  bounding-box height — this both avoids overhangs (e.g. a counterbore's
+  shoulder facing down) and corrects a part that's sitting on its side
+  because of how it was placed in the assembly, not just how it was
+  authored. Packing shelf-wraps into rows sized to keep the layout
+  roughly square by default (pass `bed_size` to match a real printer's
+  bed instead of the auto-computed size).
 
 ## Defining your own parts
 
