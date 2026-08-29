@@ -129,3 +129,18 @@ machinewright export print-layout "assemblies.your_project.assemblies.actuator.A
 machinewright export bom "assemblies.your_project.assemblies.actuator.ActuatorAssembly" --location bom.csv
 machinewright export bundle "assemblies.your_project.assemblies.actuator.ActuatorAssembly" --location artifacts/
 ```
+
+## Development
+
+### Release
+
+New production release
+
+```bash
+uv run bump2version minor --new-version <new semver version>
+```
+
+New release candidate
+```bash
+uv run bump2version build --new-version <semver tag + rc revision>
+```
