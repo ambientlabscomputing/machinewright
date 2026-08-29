@@ -1,0 +1,79 @@
+{
+  "$defs": {
+    "Quantity": {
+      "additionalProperties": false,
+      "properties": {
+        "unit": {
+          "$ref": "#/$defs/Unit"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "value",
+        "unit"
+      ],
+      "title": "Quantity",
+      "type": "object"
+    },
+    "Unit": {
+      "enum": [
+        "mm",
+        "m",
+        "g",
+        "kg",
+        "V",
+        "A",
+        "ohm",
+        "mH",
+        "H",
+        "N*m",
+        "rpm",
+        "rad/s",
+        "kg*m^2",
+        "g*cm^2",
+        "degC",
+        "W",
+        "g/cm^3",
+        "kg/m^3"
+      ],
+      "title": "Unit",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "minus": {
+      "$ref": "#/$defs/Quantity"
+    },
+    "nominal": {
+      "$ref": "#/$defs/Quantity"
+    },
+    "plus": {
+      "$ref": "#/$defs/Quantity"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "nominal",
+    "minus",
+    "plus"
+  ],
+  "title": "Tolerance",
+  "type": "object"
+}

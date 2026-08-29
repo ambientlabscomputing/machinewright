@@ -1,0 +1,83 @@
+{
+  "$defs": {
+    "ArtifactResult": {
+      "additionalProperties": false,
+      "properties": {
+        "byte_size": {
+          "title": "Byte Size",
+          "type": "integer"
+        },
+        "digest": {
+          "title": "Digest",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ExportFormat"
+        },
+        "media_type": {
+          "title": "Media Type",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "media_type",
+        "path",
+        "byte_size",
+        "digest"
+      ],
+      "title": "ArtifactResult",
+      "type": "object"
+    },
+    "ExportFormat": {
+      "enum": [
+        "step",
+        "stl",
+        "preview_svg",
+        "print_layout_stl",
+        "bom_json",
+        "bom_csv",
+        "assembly_json",
+        "manifest_json"
+      ],
+      "title": "ExportFormat",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "artifacts": {
+      "items": {
+        "$ref": "#/$defs/ArtifactResult"
+      },
+      "title": "Artifacts",
+      "type": "array"
+    },
+    "assembly_digest": {
+      "title": "Assembly Digest",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "assembly_digest",
+    "artifacts"
+  ],
+  "title": "ExportResult",
+  "type": "object"
+}

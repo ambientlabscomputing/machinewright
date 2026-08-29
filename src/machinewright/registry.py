@@ -50,7 +50,7 @@ def get_registry():
     registry_ = raw_registry()
 
     def __build_params(type_: Literal["objects", "assemblies"]):
-        for obj, data in registry_[type_].items():
+        for _obj, data in registry_[type_].items():
             sig = inspect.signature(data.get("class").__init__)
             data["params"] = {}
             for name, param in sig.parameters.items():

@@ -3,6 +3,12 @@
 A parametric CAD framework: hardware designed as composable, parametrized
 code rather than drawn by hand.
 
+Machinewright 0.2 adds the generic RFD-18 M3 substrate: explicit-unit hardware
+specifications, tolerances, typed interfaces and motor requirements,
+content-addressed assembly graphs, structured JSON BOMs, and a cancellable
+headless artifact exporter. These contracts intentionally contain no Jog
+qualification, supplier, pricing, or release policy.
+
 - **`CADObject`** (`objects/base.py`) — a single part. Required
   constructor params are the design contract; `.cad()` returns the
   cadquery geometry.
@@ -121,4 +127,5 @@ machinewright assemblies list
 machinewright export step "objects.machinewright.objects.fasteners.shoulder_bolt.ShoulderBolt" --params '{"thread_size":"M3","shoulder_diameter":4,"shoulder_length":12,"thread_length":3}' --location out.step
 machinewright export print-layout "assemblies.your_project.assemblies.actuator.ActuatorAssembly" --process printed --location print_layout.stl
 machinewright export bom "assemblies.your_project.assemblies.actuator.ActuatorAssembly" --location bom.csv
+machinewright export bundle "assemblies.your_project.assemblies.actuator.ActuatorAssembly" --location artifacts/
 ```

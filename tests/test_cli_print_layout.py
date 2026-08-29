@@ -15,7 +15,8 @@ def test_print_layout_success(clean_registry, tmp_path: Path):
     location = tmp_path / "layout.stl"
 
     result = runner.invoke(
-        app, ["export", "print-layout", f"assemblies.{key}", "--location", str(location)]
+        app,
+        ["export", "print-layout", f"assemblies.{key}", "--location", str(location)],
     )
 
     assert result.exit_code == 0, result.output
@@ -29,7 +30,8 @@ def test_print_layout_no_matching_parts_exits_nonzero(clean_registry, tmp_path: 
     location = tmp_path / "layout.stl"
 
     result = runner.invoke(
-        app, ["export", "print-layout", f"assemblies.{key}", "--location", str(location)]
+        app,
+        ["export", "print-layout", f"assemblies.{key}", "--location", str(location)],
     )
 
     assert result.exit_code == 1

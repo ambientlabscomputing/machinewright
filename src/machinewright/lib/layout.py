@@ -12,11 +12,17 @@ import cadquery
 from machinewright.assemblies.base import _walk_assembly
 from machinewright.lib.materials import Process
 
-_RESTING_FACE_EPSILON = 1e-3  # mm, tolerance for "this face is the one touching the bed"
-_DOWNWARD_NORMAL_THRESHOLD = -0.99  # dot with (0,0,-1); planar faces only, near-exact match
+_RESTING_FACE_EPSILON = (
+    1e-3  # mm, tolerance for "this face is the one touching the bed"
+)
+_DOWNWARD_NORMAL_THRESHOLD = (
+    -0.99
+)  # dot with (0,0,-1); planar faces only, near-exact match
 
 
-def collect_by_process(assy: cadquery.Assembly, process: Process) -> list[cadquery.Shape]:
+def collect_by_process(
+    assy: cadquery.Assembly, process: Process
+) -> list[cadquery.Shape]:
     """
     Recursively walks assy, returning world-located shapes for every leaf
     part whose attached material has the given process. Leaves with no
@@ -25,7 +31,8 @@ def collect_by_process(assy: cadquery.Assembly, process: Process) -> list[cadque
     return [
         shape.located(world_loc)
         for shape, metadata, world_loc, _name in _walk_assembly(assy)
-        if (material := metadata.get("material")) is not None and material.process == process
+        if (material := metadata.get("material")) is not None
+        and material.process == process
     ]
 
 
@@ -142,7 +149,9 @@ def layout_for_printing(
         total_area = sum(
             shape.BoundingBox().xlen * shape.BoundingBox().ylen for shape in dropped
         )
-        bed_width = math.sqrt(total_area) * 1.2  # margin for packing/spacing inefficiency
+        bed_width = (
+            math.sqrt(total_area) * 1.2
+        )  # margin for packing/spacing inefficiency
 
     cursor_x = 0.0
     cursor_y = 0.0

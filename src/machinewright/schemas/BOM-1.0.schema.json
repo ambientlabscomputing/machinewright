@@ -1,0 +1,224 @@
+{
+  "$defs": {
+    "BOMLineV1": {
+      "additionalProperties": false,
+      "properties": {
+        "definition_id": {
+          "title": "Definition Id",
+          "type": "string"
+        },
+        "definition_revision": {
+          "title": "Definition Revision",
+          "type": "string"
+        },
+        "envelope_mm": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                  "type": "string"
+                }
+              ]
+            }
+          ],
+          "title": "Envelope Mm",
+          "type": "array"
+        },
+        "finishes": {
+          "default": [],
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Finishes",
+          "type": "array"
+        },
+        "inspections": {
+          "default": [],
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Inspections",
+          "type": "array"
+        },
+        "line_id": {
+          "title": "Line Id",
+          "type": "string"
+        },
+        "manufacturer_part": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Manufacturer Part"
+        },
+        "material": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Material"
+        },
+        "parameter_digest": {
+          "title": "Parameter Digest",
+          "type": "string"
+        },
+        "parameters": {
+          "additionalProperties": true,
+          "title": "Parameters",
+          "type": "object"
+        },
+        "process": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Process"
+        },
+        "quantity": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Quantity"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source_instances": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Source Instances",
+          "type": "array"
+        },
+        "unit": {
+          "default": "each",
+          "title": "Unit",
+          "type": "string"
+        },
+        "unit_mass_g": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit Mass G"
+        },
+        "unit_volume_mm3": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Unit Volume Mm3"
+        }
+      },
+      "required": [
+        "line_id",
+        "definition_id",
+        "definition_revision",
+        "quantity",
+        "source_instances",
+        "parameter_digest",
+        "parameters",
+        "envelope_mm",
+        "unit_volume_mm3"
+      ],
+      "title": "BOMLineV1",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "assembly_digest": {
+      "title": "Assembly Digest",
+      "type": "string"
+    },
+    "lines": {
+      "items": {
+        "$ref": "#/$defs/BOMLineV1"
+      },
+      "title": "Lines",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "assembly_digest",
+    "lines"
+  ],
+  "title": "BOM",
+  "type": "object"
+}

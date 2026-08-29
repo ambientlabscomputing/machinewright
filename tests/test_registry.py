@@ -46,7 +46,10 @@ def test_register_dispatches_on_base_class(clean_registry):
     register(DispatchedAssembly)
 
     reg = get_registry()
-    assert f"{DispatchedObject.__module__}.{DispatchedObject.__qualname__}" in reg["objects"]
+    assert (
+        f"{DispatchedObject.__module__}.{DispatchedObject.__qualname__}"
+        in reg["objects"]
+    )
     assert (
         f"{DispatchedAssembly.__module__}.{DispatchedAssembly.__qualname__}"
         in reg["assemblies"]

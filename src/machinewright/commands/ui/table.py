@@ -7,7 +7,9 @@ def print_table(data: list[dict]) -> None:
     rows = [[str(row.get(header, "")) for header in headers] for row in data]
 
     # Calculate column widths
-    col_widths = [max(len(str(item)) for item in col) for col in zip(*rows, headers)]
+    col_widths = [
+        max(len(str(item)) for item in col) for col in zip(*rows, headers, strict=False)
+    ]
 
     # Print header
     header_row = " | ".join(

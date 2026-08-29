@@ -21,7 +21,7 @@ def _main(
         help="Additional dotted module path(s) to import for registration, "
         "on top of [tool.machinewright] modules in ./pyproject.toml",
     ),
-):
+) -> None:
     load_modules(extra=module)
 
 

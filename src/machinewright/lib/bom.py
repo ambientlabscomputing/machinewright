@@ -9,11 +9,15 @@ attach() -- no separate BOM-specific authoring step.
 
 import csv
 from dataclasses import asdict, dataclass
+from decimal import Decimal
 from enum import Enum
 
 import cadquery
 
 from machinewright.assemblies.base import _walk_assembly
+from machinewright.assembly_graph import PartNode, ResolvedAssembly, resolve_assembly
+from machinewright.canonical import canonical_json, content_digest
+from machinewright.contracts import Contract
 from machinewright.lib.materials import Material
 
 _ROUNDING = 4
@@ -34,6 +38,85 @@ class BomLine:
     total_mass_g: float | None
     params: str
     references: str
+
+
+class BOMLineV1(Contract):
+    line_id: str
+    definition_id: str
+    definition_revision: str
+    quantity: Decimal
+    unit: str = "each"
+    source_instances: tuple[str, ...]
+    parameter_digest: str
+    parameters: dict
+    manufacturer_part: dict | None = None
+    material: str | None = None
+    process: dict | None = None
+    finishes: tuple[dict, ...] = ()
+    inspections: tuple[dict, ...] = ()
+    envelope_mm: tuple[Decimal, Decimal, Decimal]
+    unit_volume_mm3: Decimal
+    unit_mass_g: Decimal | None = None
+
+
+class BOM(Contract):
+    assembly_digest: str
+    lines: tuple[BOMLineV1, ...]
+
+    @property
+    def content_digest(self) -> str:
+        return content_digest(self)
+
+
+def generate_structured_bom(source: cadquery.Assembly | ResolvedAssembly) -> BOM:
+    """Generate a deterministic, manufacturing-aware JSON BOM."""
+    graph = (
+        resolve_assembly(source) if isinstance(source, cadquery.Assembly) else source
+    )
+    groups: dict[tuple[str, str, str], list[PartNode]] = {}
+    for node in graph.nodes:
+        if isinstance(node, PartNode):
+            key = (node.definition_id, node.definition_revision, node.parameter_digest)
+            groups.setdefault(key, []).append(node)
+    lines: list[BOMLineV1] = []
+    for key in sorted(groups):
+        group = sorted(groups[key], key=lambda item: item.node_id)
+        item = group[0]
+        line_id = content_digest(
+            {"definition": key[0], "revision": key[1], "parameters": key[2]}
+        )
+        lines.append(
+            BOMLineV1(
+                line_id=line_id,
+                definition_id=item.definition_id,
+                definition_revision=item.definition_revision,
+                quantity=Decimal(len(group)),
+                source_instances=tuple(node.node_id for node in group),
+                parameter_digest=item.parameter_digest,
+                parameters=item.parameters,
+                manufacturer_part=item.manufacturer_part.model_dump(mode="json")
+                if item.manufacturer_part
+                else None,
+                material=item.material_name,
+                process=item.process.model_dump(mode="json") if item.process else None,
+                finishes=tuple(
+                    value.model_dump(mode="json") for value in item.finishes
+                ),
+                inspections=tuple(
+                    value.model_dump(mode="json") for value in item.inspections
+                ),
+                envelope_mm=item.geometry.envelope_mm,
+                unit_volume_mm3=item.geometry.volume_mm3,
+                unit_mass_g=item.geometry.mass_g,
+            )
+        )
+    return BOM(assembly_digest=graph.content_digest, lines=tuple(lines))
+
+
+def write_bom_json(source: cadquery.Assembly | ResolvedAssembly, location: str) -> None:
+    with open(location, "w", encoding="utf-8") as output:
+        output.write(canonical_json(generate_structured_bom(source)))
+        output.write("\n")
 
 
 def _format_value(value) -> str:

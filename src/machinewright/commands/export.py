@@ -9,6 +9,7 @@ import typer
 
 from machinewright.assemblies.base import CADAssembly
 from machinewright.commands.ui import print
+from machinewright.export_service import ExportFormat, ExportRequest, export_artifacts
 from machinewright.lib.bom import write_bom_csv
 from machinewright.lib.cadq import exports
 from machinewright.lib.layout import layout_for_printing
@@ -239,6 +240,30 @@ def export_bom(
     location = _resolve_location(identifier, location, "csv")
     write_bom_csv(inst.assemble(), location)
     return location
+
+
+@export.command("bundle", help="Generate a deterministic headless artifact bundle")
+def export_bundle(
+    identifier: str,
+    location: str,
+    params: str | None = None,
+    outputs: str = "step,stl,preview_svg,print_layout_stl,bom_json,bom_csv,assembly_json,manifest_json",
+):
+    inst = _instantiate(identifier, params)
+    if not isinstance(inst, CADAssembly):
+        print(f"{identifier} is not an assembly; bundle requires an assembly")
+        raise typer.Exit(code=1)
+    try:
+        formats = tuple(ExportFormat(value.strip()) for value in outputs.split(","))
+        result = export_artifacts(
+            inst, location, ExportRequest(formats=formats, basename=type(inst).__name__)
+        )
+    except ValueError as error:
+        print(str(error))
+        raise typer.Exit(code=1) from error
+    for artifact in result.artifacts:
+        print(f"{artifact.kind.value}: {artifact.path} ({artifact.digest})")
+    return result
 
 
 @export.command(

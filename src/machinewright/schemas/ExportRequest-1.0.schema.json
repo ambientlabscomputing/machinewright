@@ -1,0 +1,124 @@
+{
+  "$defs": {
+    "ExportFormat": {
+      "enum": [
+        "step",
+        "stl",
+        "preview_svg",
+        "print_layout_stl",
+        "bom_json",
+        "bom_csv",
+        "assembly_json",
+        "manifest_json"
+      ],
+      "title": "ExportFormat",
+      "type": "string"
+    },
+    "ExportLimits": {
+      "additionalProperties": false,
+      "properties": {
+        "max_cpu_seconds": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Cpu Seconds"
+        },
+        "max_elapsed_seconds": {
+          "default": 300,
+          "exclusiveMinimum": 0,
+          "title": "Max Elapsed Seconds",
+          "type": "number"
+        },
+        "max_memory_bytes": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Memory Bytes"
+        },
+        "max_output_bytes": {
+          "default": 1000000000,
+          "exclusiveMinimum": 0,
+          "title": "Max Output Bytes",
+          "type": "integer"
+        },
+        "max_parts": {
+          "default": 10000,
+          "exclusiveMinimum": 0,
+          "title": "Max Parts",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "title": "ExportLimits",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "basename": {
+      "default": "assembly",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+      "title": "Basename",
+      "type": "string"
+    },
+    "formats": {
+      "default": [
+        "step",
+        "stl",
+        "preview_svg",
+        "print_layout_stl",
+        "bom_json",
+        "bom_csv",
+        "assembly_json",
+        "manifest_json"
+      ],
+      "items": {
+        "$ref": "#/$defs/ExportFormat"
+      },
+      "title": "Formats",
+      "type": "array"
+    },
+    "limits": {
+      "$ref": "#/$defs/ExportLimits"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "stl_angular_tolerance": {
+      "default": 0.1,
+      "exclusiveMinimum": 0,
+      "title": "Stl Angular Tolerance",
+      "type": "number"
+    },
+    "stl_tolerance": {
+      "default": 0.1,
+      "exclusiveMinimum": 0,
+      "title": "Stl Tolerance",
+      "type": "number"
+    }
+  },
+  "title": "ExportRequest",
+  "type": "object"
+}

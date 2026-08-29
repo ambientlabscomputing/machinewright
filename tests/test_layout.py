@@ -10,7 +10,9 @@ from machinewright.lib.layout import (
 from machinewright.lib.materials import MATERIALS, Process
 
 
-def _box(width: float, depth: float, height: float, z: float = 0.0) -> cadquery.Workplane:
+def _box(
+    width: float, depth: float, height: float, z: float = 0.0
+) -> cadquery.Workplane:
     return cadquery.Workplane("XY", origin=(0, 0, z)).box(
         width, depth, height, centered=(True, True, False)
     )

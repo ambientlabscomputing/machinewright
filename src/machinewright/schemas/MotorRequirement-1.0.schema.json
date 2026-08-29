@@ -1,0 +1,541 @@
+{
+  "$defs": {
+    "ConnectorInterface": {
+      "additionalProperties": false,
+      "properties": {
+        "family": {
+          "title": "Family",
+          "type": "string"
+        },
+        "interface_id": {
+          "title": "Interface Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "connector",
+          "default": "connector",
+          "title": "Kind",
+          "type": "string"
+        },
+        "pinout": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Pinout",
+          "type": "object"
+        },
+        "positions": {
+          "exclusiveMinimum": 0,
+          "title": "Positions",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "interface_id",
+        "family",
+        "positions"
+      ],
+      "title": "ConnectorInterface",
+      "type": "object"
+    },
+    "ElectricalInterface": {
+      "additionalProperties": false,
+      "properties": {
+        "continuous_current": {
+          "$ref": "#/$defs/Quantity"
+        },
+        "interface_id": {
+          "title": "Interface Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "electrical",
+          "default": "electrical",
+          "title": "Kind",
+          "type": "string"
+        },
+        "peak_current": {
+          "$ref": "#/$defs/Quantity"
+        },
+        "phases": {
+          "exclusiveMinimum": 0,
+          "title": "Phases",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "voltage": {
+          "$ref": "#/$defs/Quantity"
+        }
+      },
+      "required": [
+        "interface_id",
+        "phases",
+        "voltage",
+        "continuous_current",
+        "peak_current"
+      ],
+      "title": "ElectricalInterface",
+      "type": "object"
+    },
+    "FeedbackInterface": {
+      "additionalProperties": false,
+      "properties": {
+        "feedback_type": {
+          "title": "Feedback Type",
+          "type": "string"
+        },
+        "interface_id": {
+          "title": "Interface Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "feedback",
+          "default": "feedback",
+          "title": "Kind",
+          "type": "string"
+        },
+        "protocol": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Protocol"
+        },
+        "resolution": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Resolution"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "interface_id",
+        "feedback_type"
+      ],
+      "title": "FeedbackInterface",
+      "type": "object"
+    },
+    "MechanicalMountInterface": {
+      "additionalProperties": false,
+      "properties": {
+        "bolt_circle_diameter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tolerance"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "fastener_count": {
+          "exclusiveMinimum": 0,
+          "title": "Fastener Count",
+          "type": "integer"
+        },
+        "interface_id": {
+          "title": "Interface Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "mechanical_mount",
+          "default": "mechanical_mount",
+          "title": "Kind",
+          "type": "string"
+        },
+        "pattern": {
+          "title": "Pattern",
+          "type": "string"
+        },
+        "pilot_diameter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tolerance"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "interface_id",
+        "pattern",
+        "fastener_count"
+      ],
+      "title": "MechanicalMountInterface",
+      "type": "object"
+    },
+    "Quantity": {
+      "additionalProperties": false,
+      "properties": {
+        "unit": {
+          "$ref": "#/$defs/Unit"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "value",
+        "unit"
+      ],
+      "title": "Quantity",
+      "type": "object"
+    },
+    "QuantityConstraint": {
+      "additionalProperties": false,
+      "properties": {
+        "maximum": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "minimum": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "title": "QuantityConstraint",
+      "type": "object"
+    },
+    "ShaftInterface": {
+      "additionalProperties": false,
+      "properties": {
+        "diameter": {
+          "$ref": "#/$defs/Tolerance"
+        },
+        "feature": {
+          "default": "plain",
+          "enum": [
+            "plain",
+            "key",
+            "flat",
+            "spline"
+          ],
+          "title": "Feature",
+          "type": "string"
+        },
+        "interface_id": {
+          "title": "Interface Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "shaft",
+          "default": "shaft",
+          "title": "Kind",
+          "type": "string"
+        },
+        "length": {
+          "$ref": "#/$defs/Tolerance"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "interface_id",
+        "diameter",
+        "length"
+      ],
+      "title": "ShaftInterface",
+      "type": "object"
+    },
+    "ThermalInterface": {
+      "additionalProperties": false,
+      "properties": {
+        "ambient_max": {
+          "$ref": "#/$defs/Quantity"
+        },
+        "ambient_min": {
+          "$ref": "#/$defs/Quantity"
+        },
+        "insulation_class": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Insulation Class"
+        },
+        "interface_id": {
+          "title": "Interface Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "thermal",
+          "default": "thermal",
+          "title": "Kind",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "sensor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sensor"
+        }
+      },
+      "required": [
+        "interface_id",
+        "ambient_min",
+        "ambient_max"
+      ],
+      "title": "ThermalInterface",
+      "type": "object"
+    },
+    "Tolerance": {
+      "additionalProperties": false,
+      "properties": {
+        "minus": {
+          "$ref": "#/$defs/Quantity"
+        },
+        "nominal": {
+          "$ref": "#/$defs/Quantity"
+        },
+        "plus": {
+          "$ref": "#/$defs/Quantity"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "nominal",
+        "minus",
+        "plus"
+      ],
+      "title": "Tolerance",
+      "type": "object"
+    },
+    "Unit": {
+      "enum": [
+        "mm",
+        "m",
+        "g",
+        "kg",
+        "V",
+        "A",
+        "ohm",
+        "mH",
+        "H",
+        "N*m",
+        "rpm",
+        "rad/s",
+        "kg*m^2",
+        "g*cm^2",
+        "degC",
+        "W",
+        "g/cm^3",
+        "kg/m^3"
+      ],
+      "title": "Unit",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "continuous_torque": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/QuantityConstraint"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "mass": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/QuantityConstraint"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "max_speed": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/QuantityConstraint"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "motor_types": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Motor Types",
+      "type": "array"
+    },
+    "peak_torque": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/QuantityConstraint"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "required_interfaces": {
+      "default": [],
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "connector": "#/$defs/ConnectorInterface",
+            "electrical": "#/$defs/ElectricalInterface",
+            "feedback": "#/$defs/FeedbackInterface",
+            "mechanical_mount": "#/$defs/MechanicalMountInterface",
+            "shaft": "#/$defs/ShaftInterface",
+            "thermal": "#/$defs/ThermalInterface"
+          },
+          "propertyName": "kind"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/MechanicalMountInterface"
+          },
+          {
+            "$ref": "#/$defs/ShaftInterface"
+          },
+          {
+            "$ref": "#/$defs/ElectricalInterface"
+          },
+          {
+            "$ref": "#/$defs/FeedbackInterface"
+          },
+          {
+            "$ref": "#/$defs/ThermalInterface"
+          },
+          {
+            "$ref": "#/$defs/ConnectorInterface"
+          }
+        ]
+      },
+      "title": "Required Interfaces",
+      "type": "array"
+    },
+    "requirement_id": {
+      "title": "Requirement Id",
+      "type": "string"
+    },
+    "rotor_inertia": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/QuantityConstraint"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "requirement_id"
+  ],
+  "title": "MotorRequirement",
+  "type": "object"
+}

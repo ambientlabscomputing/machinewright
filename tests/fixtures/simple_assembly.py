@@ -49,7 +49,12 @@ class SimpleAssembly(CADAssembly):
 
         base_plate = Box(height=2, width=20, depth=20)
         base_plate.material = MATERIALS["PLA"]
-        attach(assy, base_plate, loc=cadquery.Location(cadquery.Vector(0, 0, 0)), name="base_plate")
+        attach(
+            assy,
+            base_plate,
+            loc=cadquery.Location(cadquery.Vector(0, 0, 0)),
+            name="base_plate",
+        )
 
         assy.add(
             NestedPinPair().assemble(),
@@ -59,6 +64,11 @@ class SimpleAssembly(CADAssembly):
 
         top_plate = Box(height=2, width=20, depth=20)
         top_plate.material = MATERIALS["PLA"]
-        attach(assy, top_plate, loc=cadquery.Location(cadquery.Vector(0, 0, 40)), name="top_plate")
+        attach(
+            assy,
+            top_plate,
+            loc=cadquery.Location(cadquery.Vector(0, 0, 40)),
+            name="top_plate",
+        )
 
         return assy

@@ -119,16 +119,22 @@ def test_walk_assembly_yields_all_leaves_flattened():
 def test_walk_assembly_composes_world_location():
     parent = _build_nested_tree()
 
-    results = {name: (shape, world_loc) for shape, _, world_loc, name in _walk_assembly(parent)}
+    results = {
+        name: (shape, world_loc) for shape, _, world_loc, name in _walk_assembly(parent)
+    }
 
     leaf_shape, leaf_loc = results["leaf"]
     assert leaf_shape.located(leaf_loc).BoundingBox().center.z == pytest.approx(20.0)
 
     inner_a_shape, inner_a_loc = results["inner_a"]
-    assert inner_a_shape.located(inner_a_loc).BoundingBox().center.z == pytest.approx(100.0)
+    assert inner_a_shape.located(inner_a_loc).BoundingBox().center.z == pytest.approx(
+        100.0
+    )
 
     inner_b_shape, inner_b_loc = results["inner_b"]
-    assert inner_b_shape.located(inner_b_loc).BoundingBox().center.z == pytest.approx(110.0)
+    assert inner_b_shape.located(inner_b_loc).BoundingBox().center.z == pytest.approx(
+        110.0
+    )
 
 
 def test_walk_assembly_yields_metadata():
