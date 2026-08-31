@@ -101,7 +101,7 @@ CAD file bytes.
 uv sync --group dev
 uv run pytest
 uv run ruff check .
-uv run mypy
+uv run mypy -p machinewright
 ```
 
 ### Release
