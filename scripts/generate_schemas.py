@@ -3,9 +3,9 @@
 import json
 from pathlib import Path
 
-from machinewright.assembly_graph import ResolvedAssembly
 from machinewright.contracts import MotorRequirement, MotorSpec, Quantity, Tolerance
 from machinewright.export_service import ExportRequest, ExportResult
+from machinewright.hardware_graph import ResolvedHardwareGraph
 from machinewright.lib.bom import BOM
 
 MODELS = (
@@ -13,7 +13,7 @@ MODELS = (
     Tolerance,
     MotorSpec,
     MotorRequirement,
-    ResolvedAssembly,
+    ResolvedHardwareGraph,
     BOM,
     ExportRequest,
     ExportResult,

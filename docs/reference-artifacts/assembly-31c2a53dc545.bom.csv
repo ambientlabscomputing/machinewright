@@ -1,0 +1,4 @@
+definition_id,definition_revision,quantity,unit,material,process,envelope_mm,unit_volume_mm3,unit_mass_g,parameters,source_instances
+machinewright.examples.reference_hardware.ConnectedBox,1,1,each,PLA,,20.0x20.0x2.0,800.0,0.992,"{""depth"":20,""height"":2,""width"":20}",assembly/base_plate
+machinewright.examples.reference_hardware.ConnectedPin,1,1,each,Off-the-shelf hardware,,3.0x3.0x5.0,35.342917353,,"{""diameter"":3,""length"":5}",assembly/top_pin
+machinewright.objects.fasteners.dowel_pin.DowelPin,1,2,each,Off-the-shelf hardware,,3.0x3.0x5.0,35.342917353,,"{""diameter"":3,""length"":5}","assembly/pin_pair/lower_pin,assembly/pin_pair/upper_pin"

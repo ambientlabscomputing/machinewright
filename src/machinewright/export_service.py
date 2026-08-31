@@ -14,8 +14,7 @@ import time
 from cadquery import exporters
 from pydantic import Field
 
-from machinewright.assemblies.base import CADAssembly
-from machinewright.assembly_graph import resolve_assembly
+from machinewright.assemblies.base import AssemblyDefinition
 from machinewright.canonical import canonical_json
 from machinewright.contracts import Contract
 from machinewright.diagnostics import (
@@ -36,7 +35,8 @@ class ExportFormat(StrEnum):
     PRINT_LAYOUT_STL = "print_layout_stl"
     BOM_JSON = "bom_json"
     BOM_CSV = "bom_csv"
-    ASSEMBLY_JSON = "assembly_json"
+    HARDWARE_GRAPH_JSON = "hardware_graph_json"
+    HARDWARE_GRAPH_DOT = "hardware_graph_dot"
     MANIFEST_JSON = "manifest_json"
 
 
@@ -72,7 +72,7 @@ class ArtifactResult(Contract):
 
 
 class ExportResult(Contract):
-    assembly_digest: str
+    graph_digest: str
     artifacts: tuple[ArtifactResult, ...]
 
 
@@ -95,7 +95,8 @@ _INFO = {
     ExportFormat.PRINT_LAYOUT_STL: ("print-layout.stl", "model/stl"),
     ExportFormat.BOM_JSON: ("bom.json", "application/json"),
     ExportFormat.BOM_CSV: ("bom.csv", "text/csv"),
-    ExportFormat.ASSEMBLY_JSON: ("assembly.json", "application/json"),
+    ExportFormat.HARDWARE_GRAPH_JSON: ("hardware-graph.json", "application/json"),
+    ExportFormat.HARDWARE_GRAPH_DOT: ("hardware-graph.dot", "text/vnd.graphviz"),
     ExportFormat.MANIFEST_JSON: ("manifest.json", "application/json"),
 }
 
@@ -138,7 +139,7 @@ def _digest(path: Path) -> str:
 
 
 def export_artifacts(  # noqa: C901 - one transactional artifact pipeline
-    assembly: CADAssembly,
+    assembly: AssemblyDefinition,
     output_directory: str | Path,
     request: ExportRequest | None = None,
     *,
@@ -159,8 +160,8 @@ def export_artifacts(  # noqa: C901 - one transactional artifact pipeline
     shutil.rmtree(scratch, ignore_errors=True)
     scratch.mkdir(parents=True)
     started = time.monotonic()
-    raw = assembly.assemble()
-    graph = resolve_assembly(raw, root_id=request.basename)
+    design = assembly.resolve(root_id=request.basename)
+    graph = design.graph
     part_count = sum(node.kind == "part" for node in graph.nodes)
     if part_count > request.limits.max_parts:
         shutil.rmtree(scratch, ignore_errors=True)
@@ -218,27 +219,30 @@ def export_artifacts(  # noqa: C901 - one transactional artifact pipeline
         suffix, _ = _INFO[kind]
         return (
             scratch
-            / f"{request.basename}-{graph.content_digest.split(':')[1][:12]}.{suffix}"
+            / f"{request.basename}-{graph.graph_digest.split(':')[1][:12]}.{suffix}"
         )
 
     try:
         for index, kind in enumerate(formats):
             path = checkpoint(index, kind)
             if kind == ExportFormat.STEP:
-                raw.export(str(path), exportType=exporters.ExportTypes.STEP)  # type: ignore[arg-type]
+                design.assembly().export(
+                    str(path),
+                    exportType=exporters.ExportTypes.STEP,  # type: ignore[arg-type]
+                )
             elif kind == ExportFormat.STL:
                 exporters.export(
-                    assembly.cad(),
+                    design.cad(),
                     str(path),
                     exportType=exporters.ExportTypes.STL,  # type: ignore[arg-type]
                     tolerance=request.stl_tolerance,
                     angularTolerance=request.stl_angular_tolerance,
                 )
             elif kind == ExportFormat.PREVIEW_SVG:
-                exports.svg(assembly.cad(), exports.SVGOpts(), str(path))
+                exports.svg(design.cad(), exports.SVGOpts(), str(path))
             elif kind == ExportFormat.PRINT_LAYOUT_STL:
                 exporters.export(
-                    layout_for_printing(raw),
+                    layout_for_printing(design),
                     str(path),
                     exportType=exporters.ExportTypes.STL,  # type: ignore[arg-type]
                     tolerance=request.stl_tolerance,
@@ -250,13 +254,15 @@ def export_artifacts(  # noqa: C901 - one transactional artifact pipeline
                     encoding="utf-8",
                 )
             elif kind == ExportFormat.BOM_CSV:
-                write_bom_csv(raw, str(path))
-            elif kind == ExportFormat.ASSEMBLY_JSON:
+                write_bom_csv(graph, str(path))
+            elif kind == ExportFormat.HARDWARE_GRAPH_JSON:
                 path.write_text(canonical_json(graph) + "\n", encoding="utf-8")
+            elif kind == ExportFormat.HARDWARE_GRAPH_DOT:
+                path.write_text(graph.to_dot(), encoding="utf-8")
             elif kind == ExportFormat.MANIFEST_JSON:
                 manifest = {
                     "schema_version": "1.0",
-                    "assembly_digest": graph.content_digest,
+                    "graph_digest": graph.graph_digest,
                     "artifacts": [item.model_dump(mode="json") for item in artifacts],
                     "limits": request.limits.model_dump(mode="json"),
                 }
@@ -303,9 +309,7 @@ def export_artifacts(  # noqa: C901 - one transactional artifact pipeline
                     message="Export complete",
                 )
             )
-        return ExportResult(
-            assembly_digest=graph.content_digest, artifacts=tuple(final)
-        )
+        return ExportResult(graph_digest=graph.graph_digest, artifacts=tuple(final))
     except Exception:
         shutil.rmtree(scratch, ignore_errors=True)
         raise

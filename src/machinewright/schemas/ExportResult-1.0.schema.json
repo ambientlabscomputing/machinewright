@@ -47,7 +47,8 @@
         "print_layout_stl",
         "bom_json",
         "bom_csv",
-        "assembly_json",
+        "hardware_graph_json",
+        "hardware_graph_dot",
         "manifest_json"
       ],
       "title": "ExportFormat",
@@ -63,8 +64,8 @@
       "title": "Artifacts",
       "type": "array"
     },
-    "assembly_digest": {
-      "title": "Assembly Digest",
+    "graph_digest": {
+      "title": "Graph Digest",
       "type": "string"
     },
     "schema_version": {
@@ -75,7 +76,7 @@
     }
   },
   "required": [
-    "assembly_digest",
+    "graph_digest",
     "artifacts"
   ],
   "title": "ExportResult",

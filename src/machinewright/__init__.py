@@ -1,5 +1,4 @@
-from machinewright.assemblies.base import CADAssembly
-from machinewright.assembly_graph import ResolvedAssembly, resolve_assembly
+from machinewright.assemblies.base import AssemblyDefinition
 from machinewright.canonical import canonical_json, content_digest
 from machinewright.contracts import (
     ConnectorInterface,
@@ -21,6 +20,7 @@ from machinewright.contracts import (
     Tolerance,
     Unit,
     evaluate_motor_compatibility,
+    interfaces_compatible,
 )
 from machinewright.diagnostics import (
     Diagnostic,
@@ -39,18 +39,31 @@ from machinewright.export_service import (
     apply_linux_process_limits,
     export_artifacts,
 )
+from machinewright.hardware_graph import (
+    AssemblyBuilder,
+    AssemblyNode,
+    ConnectionEdge,
+    ConnectionKind,
+    ContainmentEdge,
+    PartNode,
+    PortDefinition,
+    PortInstance,
+    PortRole,
+    ResolvedDesign,
+    ResolvedHardwareGraph,
+    Transform,
+    resolve_hardware,
+)
 from machinewright.lib.bom import (
     BOM,
-    BomLine,
     BOMLineV1,
-    generate_bom,
     generate_structured_bom,
     write_bom_csv,
     write_bom_json,
 )
 from machinewright.lib.layout import collect_by_process, layout_for_printing
-from machinewright.lib.materials import MATERIALS, Material, Process, attach
-from machinewright.objects.base import CADObject
+from machinewright.lib.materials import MATERIALS, Material, Process
+from machinewright.objects.base import PartDefinition
 from machinewright.registry import (
     get_registry,
     register,
@@ -63,11 +76,14 @@ __all__ = [
     "ArtifactResult",
     "BOM",
     "BOMLineV1",
-    "BomLine",
-    "CADAssembly",
-    "CADObject",
+    "AssemblyBuilder",
+    "AssemblyDefinition",
+    "AssemblyNode",
     "CancellationToken",
+    "ConnectionEdge",
+    "ConnectionKind",
     "ConnectorInterface",
+    "ContainmentEdge",
     "Diagnostic",
     "DistributorSkuIdentity",
     "ElectricalInterface",
@@ -86,32 +102,38 @@ __all__ = [
     "MechanicalMountInterface",
     "MotorRequirement",
     "MotorSpec",
+    "PartDefinition",
+    "PartNode",
+    "PortDefinition",
+    "PortInstance",
+    "PortRole",
     "Process",
     "ProcessSpec",
     "Quantity",
     "QuantityConstraint",
-    "ResolvedAssembly",
+    "ResolvedDesign",
+    "ResolvedHardwareGraph",
     "Severity",
     "ShaftInterface",
     "ThermalInterface",
     "Tolerance",
+    "Transform",
     "Unit",
     "ValidationReport",
-    "attach",
     "apply_linux_process_limits",
     "collect_by_process",
     "canonical_json",
     "content_digest",
     "evaluate_motor_compatibility",
     "export_artifacts",
-    "generate_bom",
     "generate_structured_bom",
     "get_registry",
     "layout_for_printing",
     "register",
     "register_assembly",
     "register_object",
-    "resolve_assembly",
+    "resolve_hardware",
+    "interfaces_compatible",
     "write_bom_csv",
     "write_bom_json",
 ]

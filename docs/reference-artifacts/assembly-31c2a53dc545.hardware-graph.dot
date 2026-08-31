@@ -1,0 +1,18 @@
+digraph hardware {
+  rankdir=LR;
+  "assembly" [label="assembly\nassembly"];
+  "assembly/base_plate" [label="base_plate\npart"];
+  "assembly/pin_pair" [label="pin_pair\nassembly"];
+  "assembly/pin_pair/lower_pin" [label="lower_pin\npart"];
+  "assembly/pin_pair/upper_pin" [label="upper_pin\npart"];
+  "assembly/top_pin" [label="top_pin\npart"];
+  "assembly" -> "assembly/base_plate" [label="contains"];
+  "assembly" -> "assembly/pin_pair" [label="contains"];
+  "assembly/pin_pair" -> "assembly/pin_pair/lower_pin" [label="contains"];
+  "assembly/pin_pair" -> "assembly/pin_pair/upper_pin" [label="contains"];
+  "assembly" -> "assembly/top_pin" [label="contains"];
+  "assembly/base_plate" -> "assembly/top_pin" [style=dashed,label="mechanical"];
+  "assembly/base_plate" -> "assembly/top_pin" [style=dashed,label="electrical_power"];
+  "assembly/base_plate" -> "assembly/top_pin" [style=dashed,label="signal"];
+  "assembly/base_plate" -> "assembly/top_pin" [style=dashed,label="thermal"];
+}

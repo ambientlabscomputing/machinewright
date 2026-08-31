@@ -2,14 +2,14 @@ from functools import lru_cache
 import inspect
 from typing import Literal, TypeVar
 
-from machinewright.assemblies.base import CADAssembly
-from machinewright.objects.base import CADObject
+from machinewright.assemblies.base import AssemblyDefinition
+from machinewright.objects.base import PartDefinition
 
-_ObjectT = TypeVar("_ObjectT", bound=CADObject)
-_AssemblyT = TypeVar("_AssemblyT", bound=CADAssembly)
+_ObjectT = TypeVar("_ObjectT", bound=PartDefinition)
+_AssemblyT = TypeVar("_AssemblyT", bound=AssemblyDefinition)
 
-_OBJECTS: dict[str, type[CADObject]] = {}
-_ASSEMBLIES: dict[str, type[CADAssembly]] = {}
+_OBJECTS: dict[str, type[PartDefinition]] = {}
+_ASSEMBLIES: dict[str, type[AssemblyDefinition]] = {}
 
 
 def _key_for(cls: type) -> str:
@@ -29,12 +29,12 @@ def register_assembly(cls: type[_AssemblyT]) -> type[_AssemblyT]:
 
 
 def register(cls):
-    """Registers a CADObject or CADAssembly subclass, dispatching on its base."""
-    if issubclass(cls, CADAssembly):
+    """Registers a PartDefinition or AssemblyDefinition subclass, dispatching on its base."""
+    if issubclass(cls, AssemblyDefinition):
         return register_assembly(cls)
-    if issubclass(cls, CADObject):
+    if issubclass(cls, PartDefinition):
         return register_object(cls)
-    raise TypeError(f"{cls!r} is not a CADObject or CADAssembly subclass")
+    raise TypeError(f"{cls!r} is not a PartDefinition or AssemblyDefinition subclass")
 
 
 def raw_registry() -> dict[str, dict]:

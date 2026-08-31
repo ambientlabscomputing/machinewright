@@ -7,7 +7,7 @@ from machinewright.objects.fasteners.shoulder_bolt import ShoulderBolt
 
 
 def _volume(inst) -> float:
-    return inst.cad().val().Volume()
+    return inst.geometry().val().Volume()
 
 
 def test_box_cad_produces_nonzero_volume():

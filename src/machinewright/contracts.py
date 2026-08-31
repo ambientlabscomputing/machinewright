@@ -428,10 +428,14 @@ def _tolerance_contained(candidate: Tolerance, accepted: Tolerance) -> bool:
     return candidate_lower >= accepted_lower and candidate_upper <= accepted_upper
 
 
-def _interface_compatible(candidate: InterfaceSpec, required: InterfaceSpec) -> bool:  # noqa: C901
-    if (
-        candidate.kind != required.kind
-        or candidate.interface_id != required.interface_id
+def interfaces_compatible(
+    candidate: InterfaceSpec,
+    required: InterfaceSpec,
+    *,
+    require_identity: bool = True,
+) -> bool:  # noqa: C901
+    if candidate.kind != required.kind or (
+        require_identity and candidate.interface_id != required.interface_id
     ):
         return False
     if isinstance(candidate, ShaftInterface) and isinstance(required, ShaftInterface):
@@ -547,7 +551,7 @@ def evaluate_motor_compatibility(
                     source_path=f"$.interfaces.{required.interface_id}",
                 )
             )
-        elif not _interface_compatible(candidate, required):
+        elif not interfaces_compatible(candidate, required):
             diagnostics.append(
                 Diagnostic(
                     code="motor.interface_mismatch",

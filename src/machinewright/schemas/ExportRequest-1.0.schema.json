@@ -8,7 +8,8 @@
         "print_layout_stl",
         "bom_json",
         "bom_csv",
-        "assembly_json",
+        "hardware_graph_json",
+        "hardware_graph_dot",
         "manifest_json"
       ],
       "title": "ExportFormat",
@@ -88,7 +89,8 @@
         "print_layout_stl",
         "bom_json",
         "bom_csv",
-        "assembly_json",
+        "hardware_graph_json",
+        "hardware_graph_dot",
         "manifest_json"
       ],
       "items": {

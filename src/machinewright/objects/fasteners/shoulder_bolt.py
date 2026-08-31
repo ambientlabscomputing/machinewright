@@ -2,12 +2,12 @@ import cadquery
 
 from machinewright.lib.fasteners import SHOULDER_BOLT_SPECS, ScrewSize
 from machinewright.lib.materials import MATERIALS
-from machinewright.objects.base import CADObject
+from machinewright.objects.base import PartDefinition
 from machinewright.registry import register_object
 
 
 @register_object
-class ShoulderBolt(CADObject):
+class ShoulderBolt(PartDefinition):
     """
     Simplified stand-in shape for an off-the-shelf shoulder bolt -- used
     for assembly clearance checks and visualization, not as a
@@ -38,7 +38,7 @@ class ShoulderBolt(CADObject):
         self.shoulder_length = shoulder_length
         self.thread_length = thread_length
 
-    def cad(self) -> cadquery.Workplane:
+    def geometry(self) -> cadquery.Workplane:
         spec = SHOULDER_BOLT_SPECS[self.thread_size]
 
         head = (

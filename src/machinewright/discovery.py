@@ -1,6 +1,6 @@
 """
 Discovers and imports the modules a consuming project registers its own
-CADObject/CADAssembly subclasses in, so the CLI can list/export them
+PartDefinition/AssemblyDefinition subclasses in, so the CLI can list/export them
 alongside machinewright's built-ins.
 
 Two sources, merged: a `[tool.machinewright] modules = [...]` list read from

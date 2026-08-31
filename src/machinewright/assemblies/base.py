@@ -1,128 +1,25 @@
 from abc import abstractmethod
-from collections.abc import Iterator
+from typing import TYPE_CHECKING
 
-import cadquery
-
-from machinewright.lib.cadq.exportable import Exportable
-
-
-def _explode_assembly(
-    assy: cadquery.Assembly,
-    spacing: float,
-    axis_vec: cadquery.Vector,
-    nested: bool,
-) -> cadquery.Assembly:
-    """
-    Works on a raw cadquery.Assembly tree (not tied to our CADAssembly
-    class), so it can recurse into nested sub-assemblies -- built by
-    some other CADAssembly's own assemble() -- the same way it handles
-    top-level children.
-    """
-
-    def child_shape(child):
-        # leaf children (a Workplane/Shape in .obj) store their loc
-        # separately and need it applied; nested sub-assemblies
-        # (.obj is None -- their geometry lives in their own
-        # children) already bake their own .loc into toCompound()
-        if child.obj is not None:
-            return child.obj.val().located(child.loc)
-        return child.toCompound()
-
-    positions = {
-        id(child): round(child_shape(child).BoundingBox().center.dot(axis_vec), 3)
-        for child in assy.children
-    }
-
-    ranks = {pos: i for i, pos in enumerate(sorted(set(positions.values())))}
-
-    exploded = cadquery.Assembly()
-    for child in assy.children:
-        pos = positions[id(child)]
-        shift = axis_vec * (ranks[pos] * spacing - pos)
-        new_loc = cadquery.Location(shift) * child.loc
-        # forwarded so color/material set via attach() survive the rebuild
-        # (e.g. into a STEP export of the exploded view)
-        style = {
-            "color": child.color,
-            "material": child.material,
-            "metadata": dict(child.metadata),
-        }
-
-        if child.obj is None and nested:
-            # recurse in child's own local frame (child.loc is applied
-            # separately above, via new_loc, when adding the result)
-            inner = _explode_assembly(child, spacing, axis_vec, nested=True)
-            exploded.add(inner, loc=new_loc, name=child.name, **style)
-        else:
-            target = child.obj if child.obj is not None else child
-            exploded.add(target, loc=new_loc, name=child.name, **style)
-
-    return exploded
+if TYPE_CHECKING:
+    from machinewright.hardware_graph import AssemblyBuilder, ResolvedDesign
 
 
-def _walk_assembly(
-    assy: cadquery.Assembly,
-    parent_loc: cadquery.Location | None = None,
-) -> Iterator[tuple[cadquery.Shape, dict, cadquery.Location, str]]:
-    """
-    Recursively walks a raw cadquery.Assembly tree, yielding
-    (shape, metadata, world_loc, name) for every leaf part. world_loc
-    composes all ancestor locations, so shape.located(world_loc) lands
-    in the same place it would appear in assy.toCompound().
+class AssemblyDefinition:
+    """A reusable graph-first hardware assembly definition."""
 
-    Unlike _explode_assembly above, this always flattens all the way to
-    leaves -- it has no notion of treating a nested sub-assembly as one
-    rigid unit, which _explode_assembly needs for its non-nested case.
-    That's a real difference in what each walk is for, not incidental
-    duplication, so they're kept as separate functions rather than
-    sharing one parameterized walk.
-    """
-    if parent_loc is None:
-        parent_loc = cadquery.Location()
+    definition_id: str | None = None
+    definition_revision: str = "1"
+    ports: tuple = ()
 
-    for child in assy.children:
-        world_loc = parent_loc * child.loc
-        if child.obj is not None:
-            yield child.obj.val(), dict(child.metadata), world_loc, child.name
-        else:
-            yield from _walk_assembly(child, world_loc)
-
-
-class CADAssembly(Exportable):
     @abstractmethod
-    def assemble(self) -> cadquery.Assembly:
-        """
-        Returns the cadquery Assembly with all child parts positioned
-        """
+    def define(self, builder: "AssemblyBuilder") -> None:
+        """Declare children and connections through ``builder``."""
 
-    def assemble_exploded(
-        self,
-        spacing: float = 30.0,
-        axis: tuple[float, float, float] = (0, 0, 1),
-        nested: bool = False,
-    ) -> cadquery.Assembly:
-        """
-        Generic axial exploded view: groups children by their position
-        along `axis` (parts that share a position stay together, e.g. a
-        ring of pins), ranks the distinct positions in order, and spreads
-        those ranks `spacing` apart along `axis`. Position perpendicular to
-        `axis` is left untouched, so parts stay in their rotational/radial
-        place while the assembly's layers pull apart along the stack axis.
+    def resolve(self, *, root_id: str = "assembly") -> "ResolvedDesign":
+        from machinewright.hardware_graph import resolve_hardware
 
-        `nested=True` also explodes the internals of any nested
-        sub-assemblies (e.g. ActuatorAssembly's gearbox/shell/electronics
-        children), instead of treating each as one rigid block.
-        """
-        assy = self.assemble()
-        axis_vec = cadquery.Vector(*axis).normalized()
-        return _explode_assembly(assy, spacing, axis_vec, nested)
+        return resolve_hardware(self, root_id=root_id)
 
-    def cad(
-        self, exploded: bool = False, spacing: float = 30.0, nested: bool = False
-    ) -> cadquery.Workplane:
-        assy = (
-            self.assemble_exploded(spacing=spacing, nested=nested)
-            if exploded
-            else self.assemble()
-        )
-        return cadquery.Workplane(obj=assy.toCompound())
+    def cad(self, exploded: bool = False, spacing: float = 30.0, nested: bool = False):
+        return self.resolve().cad(exploded=exploded, spacing=spacing, nested=nested)

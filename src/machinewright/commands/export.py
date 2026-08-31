@@ -7,13 +7,14 @@ import cadquery
 from cadquery import exporters
 import typer
 
-from machinewright.assemblies.base import CADAssembly
+from machinewright.assemblies.base import AssemblyDefinition
 from machinewright.commands.ui import print
 from machinewright.export_service import ExportFormat, ExportRequest, export_artifacts
 from machinewright.lib.bom import write_bom_csv
 from machinewright.lib.cadq import exports
 from machinewright.lib.layout import layout_for_printing
 from machinewright.lib.materials import Process
+from machinewright.objects.base import PartDefinition
 from machinewright.registry import get_registry
 
 export = typer.Typer()
@@ -60,21 +61,15 @@ def _cad(
     inst, exploded: bool, explode_spacing: float, explode_nested: bool
 ) -> cadquery.Workplane:
     if exploded:
-        if not isinstance(inst, CADAssembly):
+        if not isinstance(inst, AssemblyDefinition):
             print("--exploded only applies to assemblies; exporting normally")
         else:
             return inst.cad(
                 exploded=True, spacing=explode_spacing, nested=explode_nested
             )
-    return inst.cad()
-
-
-def _assemble(
-    inst: CADAssembly, exploded: bool, explode_spacing: float, explode_nested: bool
-) -> cadquery.Assembly:
-    if exploded:
-        return inst.assemble_exploded(spacing=explode_spacing, nested=explode_nested)
-    return inst.assemble()
+    if isinstance(inst, PartDefinition):
+        return inst.geometry()
+    raise TypeError(f"{type(inst).__name__} is not exportable")
 
 
 @export.command("svg", help="Render and export image to SVG format")
@@ -130,12 +125,11 @@ def export_step(
     inst = _instantiate(identifier, params)
     location = _resolve_location(identifier, location, "step")
 
-    if isinstance(inst, CADAssembly):
+    if isinstance(inst, AssemblyDefinition):
         # Exporting the cadquery.Assembly directly (instead of going through
-        # .cad(), which flattens to one compound via toCompound()) is what
-        # lets per-part color/material -- attached via attach() -- survive
-        # into the STEP file.
-        assy = _assemble(inst, exploded, explode_spacing, explode_nested)
+        # Export the projected assembly directly so graph material/color
+        # metadata survives into the STEP file.
+        assy = inst.resolve().assembly()
         return assy.export(
             location,
             exportType=exporters.ExportTypes.STEP,
@@ -194,7 +188,7 @@ def export_print_layout(
     ascii: bool = False,
 ):
     inst = _instantiate(identifier, params)
-    if not isinstance(inst, CADAssembly):
+    if not isinstance(inst, AssemblyDefinition):
         print(f"{identifier} is not an assembly; print-layout requires an assembly")
         raise typer.Exit(code=1)
 
@@ -205,7 +199,7 @@ def export_print_layout(
     )
     try:
         cad = layout_for_printing(
-            inst.assemble(),
+            inst.resolve(),
             process=process,
             spacing=spacing,
             bed_size=bed_size,
@@ -233,12 +227,12 @@ def export_bom(
     params: str | None = None,
 ):
     inst = _instantiate(identifier, params)
-    if not isinstance(inst, CADAssembly):
+    if not isinstance(inst, AssemblyDefinition):
         print(f"{identifier} is not an assembly; bom requires an assembly")
         raise typer.Exit(code=1)
 
     location = _resolve_location(identifier, location, "csv")
-    write_bom_csv(inst.assemble(), location)
+    write_bom_csv(inst.resolve().graph, location)
     return location
 
 
@@ -247,10 +241,10 @@ def export_bundle(
     identifier: str,
     location: str,
     params: str | None = None,
-    outputs: str = "step,stl,preview_svg,print_layout_stl,bom_json,bom_csv,assembly_json,manifest_json",
+    outputs: str = "step,stl,preview_svg,print_layout_stl,bom_json,bom_csv,hardware_graph_json,hardware_graph_dot,manifest_json",
 ):
     inst = _instantiate(identifier, params)
-    if not isinstance(inst, CADAssembly):
+    if not isinstance(inst, AssemblyDefinition):
         print(f"{identifier} is not an assembly; bundle requires an assembly")
         raise typer.Exit(code=1)
     try:

@@ -9,7 +9,7 @@ import math
 
 import cadquery
 
-from machinewright.assemblies.base import _walk_assembly
+from machinewright.hardware_graph import PartNode, ResolvedDesign
 from machinewright.lib.materials import Process
 
 _RESTING_FACE_EPSILON = (
@@ -21,7 +21,7 @@ _DOWNWARD_NORMAL_THRESHOLD = (
 
 
 def collect_by_process(
-    assy: cadquery.Assembly, process: Process
+    design: ResolvedDesign, process: Process
 ) -> list[cadquery.Shape]:
     """
     Recursively walks assy, returning world-located shapes for every leaf
@@ -29,9 +29,10 @@ def collect_by_process(
     material metadata are skipped, not an error.
     """
     return [
-        shape.located(world_loc)
-        for shape, metadata, world_loc, _name in _walk_assembly(assy)
-        if (material := metadata.get("material")) is not None
+        design.geometries[node.node_id].located(node.transform.location())
+        for node in design.graph.nodes
+        if isinstance(node, PartNode)
+        and (material := design.materials.get(node.node_id)) is not None
         and material.process == process
     ]
 
@@ -96,7 +97,7 @@ def _best_orientation(shape: cadquery.Shape) -> cadquery.Shape:
 
 
 def layout_for_printing(
-    assy: cadquery.Assembly,
+    design: ResolvedDesign,
     process: Process = Process.PRINTED,
     spacing: float = 5.0,
     bed_size: tuple[float, float] | None = None,
@@ -126,7 +127,7 @@ def layout_for_printing(
     Returns a single combined Workplane -- the same shape the existing
     export commands already expect. Raises ValueError if no parts match.
     """
-    shapes = collect_by_process(assy, process)
+    shapes = collect_by_process(design, process)
     if not shapes:
         raise ValueError(f"No parts found for process {process}")
 

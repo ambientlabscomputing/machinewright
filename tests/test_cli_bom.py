@@ -25,7 +25,11 @@ def test_bom_success(clean_registry, tmp_path: Path):
 
     with open(location, newline="") as f:
         rows = list(csv.DictReader(f))
-    assert {row["part"] for row in rows} == {"Box", "DowelPin"}
+    assert {row["definition_id"].rsplit(".", 1)[-1] for row in rows} == {
+        "ConnectedBox",
+        "ConnectedPin",
+        "DowelPin",
+    }
 
 
 def test_bom_rejects_non_assembly_identifier(clean_registry, tmp_path: Path):

@@ -1,19 +1,12 @@
 """
-Material/color tracking for CADObject parts, plus operations that key off
-it (see lib/layout.py). Not a real materials database -- MATERIALS is a
+Material/color contracts consumed by graph-native part definitions. Not a
+real materials database -- MATERIALS is a
 small starter catalog; consumers are expected to add their own entries or
 construct Material directly.
 """
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING
-
-import cadquery
-from cadquery.occ_impl.assembly import Material as CQMaterial
-
-if TYPE_CHECKING:
-    from machinewright.objects.base import CADObject
 
 
 class Process(str, Enum):
@@ -32,55 +25,6 @@ class Material:
     density: float | None = (
         None  # g/cm^3; None skips cadquery's native Material wrapper
     )
-
-
-def attach(
-    assy: cadquery.Assembly,
-    part: "CADObject",
-    loc: cadquery.Location | None = None,
-    name: str | None = None,
-    *,
-    instance_key: str | None = None,
-) -> cadquery.Assembly:
-    """
-    Adds `part` to `assy`, wiring its .material (if set) into cadquery's
-    native color/material hooks (for STEP fidelity) and into our own
-    metadata (for in-process filtering, see lib/layout.py, and BOM
-    generation, see lib/bom.py). Use in place of
-    assy.add(part.cad(), loc=..., name=...) inside assemble().
-
-    Metadata always records the part's fully-qualified class and its
-    instance attributes (a generic stand-in for "constructor params",
-    since every CADObject subclass sets self.foo = foo for each param) --
-    this is what lets the BOM group repeated instances of the same part
-    into one line item and report their dimensions.
-    """
-    kwargs: dict = {"loc": loc, "name": name}
-    part_class = f"{type(part).__module__}.{type(part).__qualname__}"
-    stable_key = instance_key or name
-    metadata: dict = {
-        "part_class": part_class,
-        "part_params": {k: v for k, v in vars(part).items() if k != "material"},
-        "definition_id": part.definition_id or part_class,
-        "definition_revision": part.definition_revision,
-        "instance_key": stable_key,
-        "manufacturer_part": part.manufacturer_part,
-        "process_spec": part.process_spec,
-        "finish_requirements": part.finish_requirements,
-        "inspection_requirements": part.inspection_requirements,
-        "interfaces": part.interfaces,
-    }
-    material = part.material
-    if material is not None:
-        kwargs["color"] = cadquery.Color(*material.color)
-        metadata["material"] = material
-        if material.density is not None:
-            kwargs["material"] = CQMaterial(
-                name=material.name, density=material.density
-            )
-    kwargs["metadata"] = metadata
-    assy.add(part.cad(), **kwargs)
-    return assy
 
 
 MATERIALS: dict[str, Material] = {

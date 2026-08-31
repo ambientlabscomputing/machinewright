@@ -2,16 +2,16 @@ import pytest
 import typer
 
 from machinewright.commands.export import _instantiate
-from machinewright.objects.base import CADObject
+from machinewright.objects.base import PartDefinition
 from machinewright.registry import register_object
 
 
 def test_instantiate_resolves_exact_key_and_applies_params(clean_registry):
-    class Plate(CADObject):
+    class Plate(PartDefinition):
         def __init__(self, thickness: float):
             self.thickness = thickness
 
-        def cad(self):
+        def geometry(self):
             raise NotImplementedError
 
     register_object(Plate)

@@ -5,15 +5,14 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any, cast
 
-import cadquery
-
-from machinewright.assembly_graph import PartNode, resolve_assembly
+from machinewright.assemblies.base import AssemblyDefinition
 from machinewright.canonical import canonical_value, content_digest
+from machinewright.hardware_graph import PartNode
 from machinewright.lib.bom import generate_structured_bom
 
 
-def semantic_snapshot(assembly: cadquery.Assembly) -> dict[str, Any]:
-    graph = resolve_assembly(assembly)
+def semantic_snapshot(assembly: AssemblyDefinition) -> dict[str, Any]:
+    graph = assembly.resolve().graph
     parts = [node for node in graph.nodes if isinstance(node, PartNode)]
     return cast(
         dict[str, Any],
@@ -30,10 +29,9 @@ def semantic_snapshot(assembly: cadquery.Assembly) -> dict[str, Any]:
                     for node in parts
                 ],
                 "interfaces": [
-                    {"node_id": node.node_id, "interfaces": node.interfaces}
-                    for node in parts
+                    {"node_id": port.node_id, "port": port} for port in graph.ports
                 ],
-                "assembly_digest": graph.content_digest,
+                "graph_digest": graph.graph_digest,
                 "bom_digest": generate_structured_bom(graph).content_digest,
             }
         ),
@@ -54,5 +52,5 @@ def assert_decimal_close(
         )
 
 
-def semantic_digest(assembly: cadquery.Assembly) -> str:
+def semantic_digest(assembly: AssemblyDefinition) -> str:
     return content_digest(semantic_snapshot(assembly))

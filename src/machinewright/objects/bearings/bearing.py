@@ -1,12 +1,12 @@
 import cadquery
 
 from machinewright.lib.materials import MATERIALS
-from machinewright.objects.base import CADObject
+from machinewright.objects.base import PartDefinition
 from machinewright.registry import register_object
 
 
 @register_object
-class Bearing(CADObject):
+class Bearing(PartDefinition):
     """
     Simplified stand-in shape for an off-the-shelf ball/needle bearing --
     used for assembly clearance checks and visualization, not as a
@@ -20,7 +20,7 @@ class Bearing(CADObject):
         self.inner_diameter = inner_diameter
         self.width = width
 
-    def cad(self) -> cadquery.Workplane:
+    def geometry(self) -> cadquery.Workplane:
         return (
             cadquery.Workplane("XY")
             .circle(self.outer_diameter / 2)

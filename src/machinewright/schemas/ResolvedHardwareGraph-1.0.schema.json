@@ -3,6 +3,14 @@
     "AssemblyNode": {
       "additionalProperties": false,
       "properties": {
+        "definition_id": {
+          "title": "Definition Id",
+          "type": "string"
+        },
+        "definition_revision": {
+          "title": "Definition Revision",
+          "type": "string"
+        },
         "instance_key": {
           "title": "Instance Key",
           "type": "string"
@@ -17,25 +25,14 @@
           "title": "Node Id",
           "type": "string"
         },
-        "parent_id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Parent Id"
+        "parameter_digest": {
+          "title": "Parameter Digest",
+          "type": "string"
         },
         "schema_version": {
           "const": "1.0",
           "default": "1.0",
           "title": "Schema Version",
-          "type": "string"
-        },
-        "source_path": {
-          "title": "Source Path",
           "type": "string"
         },
         "transform": {
@@ -45,12 +42,57 @@
       "required": [
         "node_id",
         "instance_key",
-        "parent_id",
-        "source_path",
+        "definition_id",
+        "definition_revision",
+        "parameter_digest",
         "transform"
       ],
       "title": "AssemblyNode",
       "type": "object"
+    },
+    "ConnectionEdge": {
+      "additionalProperties": false,
+      "properties": {
+        "edge_id": {
+          "title": "Edge Id",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ConnectionKind"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source_port_id": {
+          "title": "Source Port Id",
+          "type": "string"
+        },
+        "target_port_id": {
+          "title": "Target Port Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "edge_id",
+        "source_port_id",
+        "target_port_id"
+      ],
+      "title": "ConnectionEdge",
+      "type": "object"
+    },
+    "ConnectionKind": {
+      "enum": [
+        "mechanical",
+        "electrical_power",
+        "signal",
+        "thermal"
+      ],
+      "title": "ConnectionKind",
+      "type": "string"
     },
     "ConnectorInterface": {
       "additionalProperties": false,
@@ -94,6 +136,42 @@
         "positions"
       ],
       "title": "ConnectorInterface",
+      "type": "object"
+    },
+    "ContainmentEdge": {
+      "additionalProperties": false,
+      "properties": {
+        "child_node_id": {
+          "title": "Child Node Id",
+          "type": "string"
+        },
+        "edge_id": {
+          "title": "Edge Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "contains",
+          "default": "contains",
+          "title": "Kind",
+          "type": "string"
+        },
+        "parent_node_id": {
+          "title": "Parent Node Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "edge_id",
+        "parent_node_id",
+        "child_node_id"
+      ],
+      "title": "ContainmentEdge",
       "type": "object"
     },
     "ElectricalInterface": {
@@ -504,6 +582,10 @@
         "geometry": {
           "$ref": "#/$defs/GeometryProperties"
         },
+        "geometry_digest": {
+          "title": "Geometry Digest",
+          "type": "string"
+        },
         "inspections": {
           "default": [],
           "items": {
@@ -515,44 +597,6 @@
         "instance_key": {
           "title": "Instance Key",
           "type": "string"
-        },
-        "interfaces": {
-          "default": [],
-          "items": {
-            "discriminator": {
-              "mapping": {
-                "connector": "#/$defs/ConnectorInterface",
-                "electrical": "#/$defs/ElectricalInterface",
-                "feedback": "#/$defs/FeedbackInterface",
-                "mechanical_mount": "#/$defs/MechanicalMountInterface",
-                "shaft": "#/$defs/ShaftInterface",
-                "thermal": "#/$defs/ThermalInterface"
-              },
-              "propertyName": "kind"
-            },
-            "oneOf": [
-              {
-                "$ref": "#/$defs/MechanicalMountInterface"
-              },
-              {
-                "$ref": "#/$defs/ShaftInterface"
-              },
-              {
-                "$ref": "#/$defs/ElectricalInterface"
-              },
-              {
-                "$ref": "#/$defs/FeedbackInterface"
-              },
-              {
-                "$ref": "#/$defs/ThermalInterface"
-              },
-              {
-                "$ref": "#/$defs/ConnectorInterface"
-              }
-            ]
-          },
-          "title": "Interfaces",
-          "type": "array"
         },
         "kind": {
           "const": "part",
@@ -596,10 +640,6 @@
           "title": "Parameters",
           "type": "object"
         },
-        "parent_id": {
-          "title": "Parent Id",
-          "type": "string"
-        },
         "process": {
           "anyOf": [
             {
@@ -617,10 +657,6 @@
           "title": "Schema Version",
           "type": "string"
         },
-        "source_path": {
-          "title": "Source Path",
-          "type": "string"
-        },
         "transform": {
           "$ref": "#/$defs/Transform"
         }
@@ -628,17 +664,123 @@
       "required": [
         "node_id",
         "instance_key",
-        "parent_id",
-        "source_path",
         "definition_id",
         "definition_revision",
         "parameter_digest",
+        "geometry_digest",
         "parameters",
         "transform",
         "geometry"
       ],
       "title": "PartNode",
       "type": "object"
+    },
+    "PortInstance": {
+      "additionalProperties": false,
+      "properties": {
+        "frame": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Transform"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "instance_key": {
+          "title": "Instance Key",
+          "type": "string"
+        },
+        "interface": {
+          "discriminator": {
+            "mapping": {
+              "connector": "#/$defs/ConnectorInterface",
+              "electrical": "#/$defs/ElectricalInterface",
+              "feedback": "#/$defs/FeedbackInterface",
+              "mechanical_mount": "#/$defs/MechanicalMountInterface",
+              "shaft": "#/$defs/ShaftInterface",
+              "thermal": "#/$defs/ThermalInterface"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/MechanicalMountInterface"
+            },
+            {
+              "$ref": "#/$defs/ShaftInterface"
+            },
+            {
+              "$ref": "#/$defs/ElectricalInterface"
+            },
+            {
+              "$ref": "#/$defs/FeedbackInterface"
+            },
+            {
+              "$ref": "#/$defs/ThermalInterface"
+            },
+            {
+              "$ref": "#/$defs/ConnectorInterface"
+            }
+          ],
+          "title": "Interface"
+        },
+        "max_connections": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 1,
+          "title": "Max Connections"
+        },
+        "node_id": {
+          "title": "Node Id",
+          "type": "string"
+        },
+        "port_id": {
+          "title": "Port Id",
+          "type": "string"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "role": {
+          "$ref": "#/$defs/PortRole",
+          "default": "bidirectional"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "port_id",
+        "node_id",
+        "instance_key",
+        "interface"
+      ],
+      "title": "PortInstance",
+      "type": "object"
+    },
+    "PortRole": {
+      "enum": [
+        "source",
+        "sink",
+        "bidirectional"
+      ],
+      "title": "PortRole",
+      "type": "string"
     },
     "ProcessSpec": {
       "additionalProperties": false,
@@ -832,6 +974,11 @@
       "additionalProperties": false,
       "properties": {
         "rotation_degrees_xyz": {
+          "default": [
+            "0",
+            "0",
+            "0"
+          ],
           "maxItems": 3,
           "minItems": 3,
           "prefixItems": [
@@ -879,6 +1026,11 @@
           "type": "string"
         },
         "translation_mm": {
+          "default": [
+            "0",
+            "0",
+            "0"
+          ],
           "maxItems": 3,
           "minItems": 3,
           "prefixItems": [
@@ -920,10 +1072,6 @@
           "type": "array"
         }
       },
-      "required": [
-        "translation_mm",
-        "rotation_degrees_xyz"
-      ],
       "title": "Transform",
       "type": "object"
     },
@@ -954,9 +1102,32 @@
   },
   "additionalProperties": false,
   "properties": {
+    "connections": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ConnectionEdge"
+      },
+      "title": "Connections",
+      "type": "array"
+    },
+    "containment": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ContainmentEdge"
+      },
+      "title": "Containment",
+      "type": "array"
+    },
     "nodes": {
       "items": {
-        "anyOf": [
+        "discriminator": {
+          "mapping": {
+            "assembly": "#/$defs/AssemblyNode",
+            "part": "#/$defs/PartNode"
+          },
+          "propertyName": "kind"
+        },
+        "oneOf": [
           {
             "$ref": "#/$defs/AssemblyNode"
           },
@@ -966,6 +1137,14 @@
         ]
       },
       "title": "Nodes",
+      "type": "array"
+    },
+    "ports": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/PortInstance"
+      },
+      "title": "Ports",
       "type": "array"
     },
     "root_id": {
@@ -983,6 +1162,6 @@
     "root_id",
     "nodes"
   ],
-  "title": "ResolvedAssembly",
+  "title": "ResolvedHardwareGraph",
   "type": "object"
 }
