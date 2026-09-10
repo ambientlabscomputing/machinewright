@@ -1,0 +1,45 @@
+name: Machinewright native
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --all-groups --frozen
+      - run: uv run python scripts/generate_protocol.py
+      - run: uv run python scripts/generate_schemas.py
+      - run: git diff --exit-code -- src/machinewright/protocol src/machinewright/schemas
+      - run: uv run ruff check .
+      - run: uv run mypy -p machinewright
+      - run: uv run pytest -q
+
+  native-core:
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --manifest-path native/Cargo.toml --all -- --check
+      - run: cargo clippy --manifest-path native/Cargo.toml --workspace --exclude machinewright-floem --all-targets -- -D warnings
+      - run: cargo test --manifest-path native/Cargo.toml --workspace --exclude machinewright-floem
+
+  native-app:
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev libx11-xcb-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev pkg-config
+      - run: cargo build --manifest-path native/Cargo.toml --package machinewright-floem

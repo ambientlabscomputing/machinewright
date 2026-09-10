@@ -1094,7 +1094,8 @@
         "degC",
         "W",
         "g/cm^3",
-        "kg/m^3"
+        "kg/m^3",
+        "s"
       ],
       "title": "Unit",
       "type": "string"

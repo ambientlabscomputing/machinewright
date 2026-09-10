@@ -1,0 +1,99 @@
+syntax = "proto3";
+
+package machinewright.worker.v1;
+
+message Hello {
+  uint32 protocol_version = 1;
+  repeated string capabilities = 2;
+}
+
+message SourceOverlay {
+  string relative_path = 1;
+  bytes content = 2;
+}
+
+message EvaluateProject {
+  string session_id = 1;
+  uint64 generation = 2;
+  string project_root = 3;
+  string template_id = 4;
+  string template_version = 5;
+  bytes inputs_json = 6;
+  string output_directory = 7;
+  repeated SourceOverlay overlays = 8;
+  string environment_digest = 9;
+}
+
+message CancelEvaluation {
+  string session_id = 1;
+  uint64 generation = 2;
+}
+
+message Shutdown {}
+
+message WorkerRequest {
+  oneof request {
+    Hello hello = 1;
+    EvaluateProject evaluate = 2;
+    CancelEvaluation cancel = 3;
+    Shutdown shutdown = 4;
+  }
+}
+
+message CapabilityReport {
+  uint32 protocol_version = 1;
+  repeated string capabilities = 2;
+  string python_version = 3;
+  string interpreter = 4;
+  string machinewright_version = 5;
+  string cad_backend_version = 6;
+  repeated string transports = 7;
+}
+
+message EvaluationProgress {
+  string session_id = 1;
+  uint64 generation = 2;
+  string stage = 3;
+  uint32 completed = 4;
+  uint32 total = 5;
+  string message = 6;
+}
+
+message PartialDiagnostics {
+  string session_id = 1;
+  uint64 generation = 2;
+  bytes diagnostics_json = 3;
+}
+
+message EvaluationCompleted {
+  string session_id = 1;
+  uint64 generation = 2;
+  string snapshot_path = 3;
+  string graph_digest = 4;
+  string artifact_manifest_digest = 5;
+}
+
+message EvaluationFailed {
+  string session_id = 1;
+  uint64 generation = 2;
+  string code = 3;
+  string message = 4;
+  string traceback = 5;
+  bytes diagnostics_json = 6;
+}
+
+message EvaluationCancelled {
+  string session_id = 1;
+  uint64 generation = 2;
+}
+
+message WorkerEvent {
+  oneof event {
+    CapabilityReport capabilities = 1;
+    EvaluationProgress progress = 2;
+    PartialDiagnostics diagnostics = 3;
+    EvaluationCompleted completed = 4;
+    EvaluationFailed failed = 5;
+    EvaluationCancelled cancelled = 6;
+  }
+}

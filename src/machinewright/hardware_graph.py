@@ -6,6 +6,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import StrEnum
+import inspect
 from typing import Annotated, Any, Literal
 
 import cadquery
@@ -476,6 +477,8 @@ class _Placement:
     definition: Any
     transform: Transform
     assembly: bool
+    source_path: str | None
+    source_line: int | None
 
 
 @dataclass(frozen=True)
@@ -522,8 +525,17 @@ class AssemblyBuilder:
         if not key or "/" in key or "#" in key or key in self._keys:
             raise ValueError(f"invalid or duplicate instance key {key!r}")
         self._keys.add(key)
+        caller = inspect.currentframe()
+        caller = caller.f_back.f_back if caller and caller.f_back else None
         self.placements.append(
-            _Placement(key, definition, transform or Transform.identity(), assembly)
+            _Placement(
+                key,
+                definition,
+                transform or Transform.identity(),
+                assembly,
+                caller.f_code.co_filename if caller is not None else None,
+                caller.f_lineno if caller is not None else None,
+            )
         )
         return NodeRef(key)
 
@@ -546,6 +558,7 @@ class ResolvedDesign:
     graph: ResolvedHardwareGraph
     geometries: dict[str, cadquery.Shape]
     materials: dict[str, Any]
+    source_hints: dict[str, tuple[str, int]]
 
     def assembly(self) -> cadquery.Assembly:
         nodes = {node.node_id: node for node in self.graph.nodes}
@@ -593,13 +606,16 @@ class ResolvedDesign:
         return cadquery.Workplane(obj=cadquery.Compound.makeCompound(shapes))
 
 
-def resolve_hardware(definition: Any, *, root_id: str = "assembly") -> ResolvedDesign:
+def resolve_hardware(  # noqa: C901 - recursive graph resolution pipeline
+    definition: Any, *, root_id: str = "assembly"
+) -> ResolvedDesign:
     nodes: list[HardwareNode] = []
     ports: list[PortInstance] = []
     containment: list[ContainmentEdge] = []
     connections: list[ConnectionEdge] = []
     geometries: dict[str, cadquery.Shape] = {}
     materials: dict[str, Any] = {}
+    source_hints: dict[str, tuple[str, int]] = {}
 
     def resolve_definition(
         current: Any,
@@ -621,6 +637,13 @@ def resolve_hardware(definition: Any, *, root_id: str = "assembly") -> ResolvedD
                 transform=transform,
             )
         )
+        try:
+            source_path = inspect.getsourcefile(type(current))
+            _, source_line = inspect.getsourcelines(type(current))
+            if source_path is not None:
+                source_hints.setdefault(node_id, (source_path, source_line))
+        except (OSError, TypeError):
+            pass
         for port in current.ports:
             ports.append(
                 PortInstance(
@@ -643,6 +666,8 @@ def resolve_hardware(definition: Any, *, root_id: str = "assembly") -> ResolvedD
         for placement in builder.placements:
             child_id = local_ids[placement.key]
             child_transform = transform.compose(placement.transform)
+            if placement.source_path is not None and placement.source_line is not None:
+                source_hints[child_id] = (placement.source_path, placement.source_line)
             containment.append(
                 ContainmentEdge(
                     edge_id=f"contains:{child_id}",
@@ -744,4 +769,9 @@ def resolve_hardware(definition: Any, *, root_id: str = "assembly") -> ResolvedD
     report = graph.validate_graph()
     if not report.valid:
         raise MachinewrightError("hardware graph validation failed", report)
-    return ResolvedDesign(graph=graph, geometries=geometries, materials=materials)
+    return ResolvedDesign(
+        graph=graph,
+        geometries=geometries,
+        materials=materials,
+        source_hints=source_hints,
+    )

@@ -1,0 +1,81 @@
+{
+  "$defs": {
+    "Quantity": {
+      "additionalProperties": false,
+      "properties": {
+        "unit": {
+          "$ref": "#/$defs/Unit"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "value",
+        "unit"
+      ],
+      "title": "Quantity",
+      "type": "object"
+    },
+    "Unit": {
+      "enum": [
+        "mm",
+        "m",
+        "g",
+        "kg",
+        "V",
+        "A",
+        "ohm",
+        "mH",
+        "H",
+        "N*m",
+        "rpm",
+        "rad/s",
+        "kg*m^2",
+        "g*cm^2",
+        "degC",
+        "W",
+        "g/cm^3",
+        "kg/m^3",
+        "s"
+      ],
+      "title": "Unit",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A guaranteed torque envelope at or below a stated motor speed.",
+  "properties": {
+    "continuous_torque": {
+      "$ref": "#/$defs/Quantity"
+    },
+    "peak_torque": {
+      "$ref": "#/$defs/Quantity"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "speed": {
+      "$ref": "#/$defs/Quantity"
+    }
+  },
+  "required": [
+    "speed",
+    "continuous_torque",
+    "peak_torque"
+  ],
+  "title": "MotorOperatingPoint",
+  "type": "object"
+}

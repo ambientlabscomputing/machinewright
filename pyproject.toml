@@ -10,12 +10,14 @@ requires-python = ">=3.13"
 dependencies = [
     "cadquery>=2.8.0",
     "pydantic>=2.13.4",
+    "protobuf>=6.31.0",
     "result>=0.17.0",
     "typer>=0.27.1",
 ]
 
 [project.scripts]
 machinewright = "machinewright.main:app"
+machinewright-worker = "machinewright.worker:main"
 
 [build-system]
 requires = ["uv_build>=0.10.0,<0.11.0"]
@@ -27,6 +29,7 @@ dev = [
     "ruff>=0.16.2",
     "pytest>=8.0.0",
     "bump2version>=1.0.1",
+    "ty==0.0.79",
 ]
 
 [tool.pytest.ini_options]
@@ -45,6 +48,7 @@ module = [
     "machinewright.lib.bom",
     "machinewright.lib.materials",
     "machinewright.objects.base",
+    "machinewright.protocol.*",
     "machinewright.registry",
 ]
 ignore_errors = true
@@ -64,6 +68,7 @@ exclude = [
     ".venv",
     "build",
     "dist",
+    "src/machinewright/protocol/machinewright_worker_pb2.py",
 ]
 
 [tool.ruff.lint]

@@ -3,7 +3,9 @@ from decimal import Decimal
 import pytest
 
 from machinewright import (
+    DutyCycleRating,
     ManufacturerPartIdentity,
+    MotorOperatingPoint,
     MotorRequirement,
     MotorSpec,
     Quantity,
@@ -105,3 +107,62 @@ def test_interface_matching_normalizes_units_and_contains_tolerance():
     assert evaluate_motor_compatibility(
         spec, MotorRequirement(requirement_id="slot", required_interfaces=(accepted,))
     ).valid
+
+
+def test_torque_speed_and_duty_cycle_are_checked_with_stable_diagnostics():
+    offered_point = MotorOperatingPoint(
+        speed=q("600", Unit.RPM),
+        continuous_torque=q("1.2", Unit.NM),
+        peak_torque=q("2.4", Unit.NM),
+    )
+    spec = MotorSpec(
+        identity=ManufacturerPartIdentity(manufacturer="Example", part_number="M3"),
+        datasheet_revision="A",
+        motor_type="stepper",
+        mass=q("1", Unit.KG),
+        rotor_inertia=q("1", Unit.KG_M2),
+        continuous_torque=q("1.2", Unit.NM),
+        peak_torque=q("2.4", Unit.NM),
+        max_speed=q("600", Unit.RPM),
+        interfaces=(),
+        torque_speed_curve=(offered_point,),
+        duty_cycle=DutyCycleRating(
+            cycle_id="s1",
+            duration=q("600", Unit.S),
+            on_fraction=Decimal("0.8"),
+            ambient_max=q("40", Unit.C),
+        ),
+    )
+    valid = MotorRequirement(
+        requirement_id="axis",
+        required_operating_points=(
+            MotorOperatingPoint(
+                speed=q("500", Unit.RPM),
+                continuous_torque=q("1", Unit.NM),
+                peak_torque=q("2", Unit.NM),
+            ),
+        ),
+        duty_cycle=DutyCycleRating(
+            cycle_id="gantry",
+            duration=q("300", Unit.S),
+            on_fraction=Decimal("0.5"),
+            ambient_max=q("35", Unit.C),
+        ),
+    )
+    assert evaluate_motor_compatibility(spec, valid).valid
+
+    invalid = valid.model_copy(
+        update={
+            "required_operating_points": (
+                MotorOperatingPoint(
+                    speed=q("700", Unit.RPM),
+                    continuous_torque=q("1", Unit.NM),
+                    peak_torque=q("2", Unit.NM),
+                ),
+            )
+        }
+    )
+    report = evaluate_motor_compatibility(spec, invalid)
+    assert [diagnostic.code for diagnostic in report.diagnostics] == [
+        "motor.operating_point_unmet"
+    ]

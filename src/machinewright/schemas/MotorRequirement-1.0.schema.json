@@ -44,6 +44,51 @@
       "title": "ConnectorInterface",
       "type": "object"
     },
+    "DutyCycleRating": {
+      "additionalProperties": false,
+      "description": "Generic duty capability used for compatibility screening.\n\nQualification evidence and machine-specific load spectra intentionally remain\noutside Machinewright.",
+      "properties": {
+        "ambient_max": {
+          "$ref": "#/$defs/Quantity"
+        },
+        "cycle_id": {
+          "minLength": 1,
+          "title": "Cycle Id",
+          "type": "string"
+        },
+        "duration": {
+          "$ref": "#/$defs/Quantity"
+        },
+        "on_fraction": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "On Fraction"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "cycle_id",
+        "duration",
+        "on_fraction",
+        "ambient_max"
+      ],
+      "title": "DutyCycleRating",
+      "type": "object"
+    },
     "ElectricalInterface": {
       "additionalProperties": false,
       "properties": {
@@ -201,6 +246,34 @@
         "fastener_count"
       ],
       "title": "MechanicalMountInterface",
+      "type": "object"
+    },
+    "MotorOperatingPoint": {
+      "additionalProperties": false,
+      "description": "A guaranteed torque envelope at or below a stated motor speed.",
+      "properties": {
+        "continuous_torque": {
+          "$ref": "#/$defs/Quantity"
+        },
+        "peak_torque": {
+          "$ref": "#/$defs/Quantity"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "speed": {
+          "$ref": "#/$defs/Quantity"
+        }
+      },
+      "required": [
+        "speed",
+        "continuous_torque",
+        "peak_torque"
+      ],
+      "title": "MotorOperatingPoint",
       "type": "object"
     },
     "Quantity": {
@@ -413,7 +486,8 @@
         "degC",
         "W",
         "g/cm^3",
-        "kg/m^3"
+        "kg/m^3",
+        "s"
       ],
       "title": "Unit",
       "type": "string"
@@ -425,6 +499,17 @@
       "anyOf": [
         {
           "$ref": "#/$defs/QuantityConstraint"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "duty_cycle": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DutyCycleRating"
         },
         {
           "type": "null"
@@ -509,6 +594,14 @@
         ]
       },
       "title": "Required Interfaces",
+      "type": "array"
+    },
+    "required_operating_points": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/MotorOperatingPoint"
+      },
+      "title": "Required Operating Points",
       "type": "array"
     },
     "requirement_id": {

@@ -1,0 +1,28 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/machinewright-protocol",
+    "crates/machinewright-model",
+    "crates/machinewright-cache",
+    "crates/machinewright-evaluator",
+    "crates/machinewright-analysis",
+    "crates/machinewright-workspace",
+    "crates/machinewright-render",
+    "crates/machinewright-app",
+    "crates/machinewright-language",
+    "crates/machinewright-editor",
+    "adapters/floem",
+]
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+rust-version = "1.85"
+
+[workspace.dependencies]
+prost = "0.14"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+thiserror = "2"
+tempfile = "3"

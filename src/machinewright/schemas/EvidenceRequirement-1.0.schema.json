@@ -1,0 +1,83 @@
+{
+  "$defs": {
+    "ProcedureRequirement": {
+      "additionalProperties": false,
+      "properties": {
+        "observable_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Observable Ids",
+          "type": "array"
+        },
+        "procedure_id": {
+          "minLength": 1,
+          "title": "Procedure Id",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "revision": {
+          "title": "Revision",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "procedure_id",
+        "revision",
+        "reason"
+      ],
+      "title": "ProcedureRequirement",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "applicable_graph_digest": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Applicable Graph Digest"
+    },
+    "operating_envelope": {
+      "additionalProperties": true,
+      "title": "Operating Envelope",
+      "type": "object"
+    },
+    "procedure": {
+      "$ref": "#/$defs/ProcedureRequirement"
+    },
+    "requirement_id": {
+      "minLength": 1,
+      "title": "Requirement Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "requirement_id",
+    "procedure"
+  ],
+  "title": "EvidenceRequirement",
+  "type": "object"
+}

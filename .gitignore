@@ -1,2 +1,7 @@
 **/__pycache__/
 uv.lock
+
+# Rust (native/)
+**/target/
+**/*.rs.bk
+*.pdb

@@ -1,0 +1,16 @@
+project_id = "machinewright.reference"
+environment_lock = "uv.lock"
+assets = []
+input_configurations = ["examples/inputs/reference.json"]
+
+[[templates]]
+id = "machinewright.reference.simple"
+version = "1.0.0"
+callable = "examples.reference_project:reference_machine"
+cacheable = true
+
+[[golden_evaluations]]
+name = "reference"
+template_id = "machinewright.reference.simple"
+template_version = "1.0.0"
+inputs = "examples/inputs/reference.json"

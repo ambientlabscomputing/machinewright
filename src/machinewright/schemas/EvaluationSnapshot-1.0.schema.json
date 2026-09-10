@@ -1,0 +1,1749 @@
+{
+  "$defs": {
+    "AssemblyNode": {
+      "additionalProperties": false,
+      "properties": {
+        "definition_id": {
+          "title": "Definition Id",
+          "type": "string"
+        },
+        "definition_revision": {
+          "title": "Definition Revision",
+          "type": "string"
+        },
+        "instance_key": {
+          "title": "Instance Key",
+          "type": "string"
+        },
+        "kind": {
+          "const": "assembly",
+          "default": "assembly",
+          "title": "Kind",
+          "type": "string"
+        },
+        "node_id": {
+          "title": "Node Id",
+          "type": "string"
+        },
+        "parameter_digest": {
+          "title": "Parameter Digest",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "transform": {
+          "$ref": "#/$defs/Transform"
+        }
+      },
+      "required": [
+        "node_id",
+        "instance_key",
+        "definition_id",
+        "definition_revision",
+        "parameter_digest",
+        "transform"
+      ],
+      "title": "AssemblyNode",
+      "type": "object"
+    },
+    "ConnectionEdge": {
+      "additionalProperties": false,
+      "properties": {
+        "edge_id": {
+          "title": "Edge Id",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ConnectionKind"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source_port_id": {
+          "title": "Source Port Id",
+          "type": "string"
+        },
+        "target_port_id": {
+          "title": "Target Port Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "edge_id",
+        "source_port_id",
+        "target_port_id"
+      ],
+      "title": "ConnectionEdge",
+      "type": "object"
+    },
+    "ConnectionKind": {
+      "enum": [
+        "mechanical",
+        "electrical_power",
+        "signal",
+        "thermal"
+      ],
+      "title": "ConnectionKind",
+      "type": "string"
+    },
+    "ConnectorInterface": {
+      "additionalProperties": false,
+      "properties": {
+        "family": {
+          "title": "Family",
+          "type": "string"
+        },
+        "interface_id": {
+          "title": "Interface Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "connector",
+          "default": "connector",
+          "title": "Kind",
+          "type": "string"
+        },
+        "pinout": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Pinout",
+          "type": "object"
+        },
+        "positions": {
+          "exclusiveMinimum": 0,
+          "title": "Positions",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "interface_id",
+        "family",
+        "positions"
+      ],
+      "title": "ConnectorInterface",
+      "type": "object"
+    },
+    "ContainmentEdge": {
+      "additionalProperties": false,
+      "properties": {
+        "child_node_id": {
+          "title": "Child Node Id",
+          "type": "string"
+        },
+        "edge_id": {
+          "title": "Edge Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "contains",
+          "default": "contains",
+          "title": "Kind",
+          "type": "string"
+        },
+        "parent_node_id": {
+          "title": "Parent Node Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "edge_id",
+        "parent_node_id",
+        "child_node_id"
+      ],
+      "title": "ContainmentEdge",
+      "type": "object"
+    },
+    "DependencyRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "conservative": {
+          "default": false,
+          "title": "Conservative",
+          "type": "boolean"
+        },
+        "dependency_id": {
+          "title": "Dependency Id",
+          "type": "string"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Source Ids",
+          "type": "array"
+        },
+        "target_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Target Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "dependency_id",
+        "kind"
+      ],
+      "title": "DependencyRecord",
+      "type": "object"
+    },
+    "Diagnostic": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "pattern": "^[a-z][a-z0-9_.-]+$",
+          "title": "Code",
+          "type": "string"
+        },
+        "context": {
+          "additionalProperties": true,
+          "title": "Context",
+          "type": "object"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        },
+        "source_path": {
+          "default": "$",
+          "title": "Source Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "severity",
+        "message"
+      ],
+      "title": "Diagnostic",
+      "type": "object"
+    },
+    "ElectricalInterface": {
+      "additionalProperties": false,
+      "properties": {
+        "continuous_current": {
+          "$ref": "#/$defs/Quantity"
+        },
+        "interface_id": {
+          "title": "Interface Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "electrical",
+          "default": "electrical",
+          "title": "Kind",
+          "type": "string"
+        },
+        "peak_current": {
+          "$ref": "#/$defs/Quantity"
+        },
+        "phases": {
+          "exclusiveMinimum": 0,
+          "title": "Phases",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "voltage": {
+          "$ref": "#/$defs/Quantity"
+        }
+      },
+      "required": [
+        "interface_id",
+        "phases",
+        "voltage",
+        "continuous_current",
+        "peak_current"
+      ],
+      "title": "ElectricalInterface",
+      "type": "object"
+    },
+    "EvaluationProvenance": {
+      "additionalProperties": false,
+      "properties": {
+        "asset_digest": {
+          "title": "Asset Digest",
+          "type": "string"
+        },
+        "environment_digest": {
+          "title": "Environment Digest",
+          "type": "string"
+        },
+        "input_digest": {
+          "title": "Input Digest",
+          "type": "string"
+        },
+        "machinewright_version": {
+          "title": "Machinewright Version",
+          "type": "string"
+        },
+        "project_source_digest": {
+          "title": "Project Source Digest",
+          "type": "string"
+        },
+        "python_version": {
+          "title": "Python Version",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "template_id": {
+          "title": "Template Id",
+          "type": "string"
+        },
+        "template_source_digest": {
+          "title": "Template Source Digest",
+          "type": "string"
+        },
+        "template_version": {
+          "title": "Template Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "template_id",
+        "template_version",
+        "template_source_digest",
+        "project_source_digest",
+        "environment_digest",
+        "input_digest",
+        "asset_digest",
+        "python_version",
+        "machinewright_version"
+      ],
+      "title": "EvaluationProvenance",
+      "type": "object"
+    },
+    "EvidenceRequirement": {
+      "additionalProperties": false,
+      "properties": {
+        "applicable_graph_digest": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Applicable Graph Digest"
+        },
+        "operating_envelope": {
+          "additionalProperties": true,
+          "title": "Operating Envelope",
+          "type": "object"
+        },
+        "procedure": {
+          "$ref": "#/$defs/ProcedureRequirement"
+        },
+        "requirement_id": {
+          "minLength": 1,
+          "title": "Requirement Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "requirement_id",
+        "procedure"
+      ],
+      "title": "EvidenceRequirement",
+      "type": "object"
+    },
+    "FeedbackInterface": {
+      "additionalProperties": false,
+      "properties": {
+        "feedback_type": {
+          "title": "Feedback Type",
+          "type": "string"
+        },
+        "interface_id": {
+          "title": "Interface Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "feedback",
+          "default": "feedback",
+          "title": "Kind",
+          "type": "string"
+        },
+        "protocol": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Protocol"
+        },
+        "resolution": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Resolution"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "interface_id",
+        "feedback_type"
+      ],
+      "title": "FeedbackInterface",
+      "type": "object"
+    },
+    "FinishRequirement": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "finish_id": {
+          "title": "Finish Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "finish_id",
+        "description"
+      ],
+      "title": "FinishRequirement",
+      "type": "object"
+    },
+    "GeometryProperties": {
+      "additionalProperties": false,
+      "properties": {
+        "center_mm": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                  "type": "string"
+                }
+              ]
+            }
+          ],
+          "title": "Center Mm",
+          "type": "array"
+        },
+        "envelope_mm": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                  "type": "string"
+                }
+              ]
+            }
+          ],
+          "title": "Envelope Mm",
+          "type": "array"
+        },
+        "mass_g": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mass G"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "volume_mm3": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Volume Mm3"
+        }
+      },
+      "required": [
+        "envelope_mm",
+        "volume_mm3",
+        "center_mm"
+      ],
+      "title": "GeometryProperties",
+      "type": "object"
+    },
+    "InspectionRequirement": {
+      "additionalProperties": false,
+      "properties": {
+        "acceptance": {
+          "title": "Acceptance",
+          "type": "string"
+        },
+        "characteristic": {
+          "title": "Characteristic",
+          "type": "string"
+        },
+        "inspection_id": {
+          "title": "Inspection Id",
+          "type": "string"
+        },
+        "method": {
+          "title": "Method",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "inspection_id",
+        "characteristic",
+        "method",
+        "acceptance"
+      ],
+      "title": "InspectionRequirement",
+      "type": "object"
+    },
+    "ManufacturerPartIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "manufacturer": {
+          "minLength": 1,
+          "title": "Manufacturer",
+          "type": "string"
+        },
+        "part_number": {
+          "minLength": 1,
+          "title": "Part Number",
+          "type": "string"
+        },
+        "revision": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revision"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "manufacturer",
+        "part_number"
+      ],
+      "title": "ManufacturerPartIdentity",
+      "type": "object"
+    },
+    "MechanicalMountInterface": {
+      "additionalProperties": false,
+      "properties": {
+        "bolt_circle_diameter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tolerance"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "fastener_count": {
+          "exclusiveMinimum": 0,
+          "title": "Fastener Count",
+          "type": "integer"
+        },
+        "interface_id": {
+          "title": "Interface Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "mechanical_mount",
+          "default": "mechanical_mount",
+          "title": "Kind",
+          "type": "string"
+        },
+        "pattern": {
+          "title": "Pattern",
+          "type": "string"
+        },
+        "pilot_diameter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tolerance"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "interface_id",
+        "pattern",
+        "fastener_count"
+      ],
+      "title": "MechanicalMountInterface",
+      "type": "object"
+    },
+    "MeshReference": {
+      "additionalProperties": false,
+      "properties": {
+        "bounds": {
+          "anyOf": [
+            {
+              "maxItems": 6,
+              "minItems": 6,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bounds"
+        },
+        "byte_size": {
+          "title": "Byte Size",
+          "type": "integer"
+        },
+        "digest": {
+          "title": "Digest",
+          "type": "string"
+        },
+        "encoding": {
+          "default": "mwm2",
+          "enum": [
+            "mwm1",
+            "mwm2"
+          ],
+          "title": "Encoding",
+          "type": "string"
+        },
+        "graph_node_id": {
+          "title": "Graph Node Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "triangle_count": {
+          "title": "Triangle Count",
+          "type": "integer"
+        },
+        "vertex_count": {
+          "title": "Vertex Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "graph_node_id",
+        "digest",
+        "name",
+        "byte_size",
+        "vertex_count",
+        "triangle_count"
+      ],
+      "title": "MeshReference",
+      "type": "object"
+    },
+    "Observable": {
+      "additionalProperties": false,
+      "properties": {
+        "extension_schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Extension Schema"
+        },
+        "feasible": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Feasible"
+        },
+        "kind": {
+          "$ref": "#/$defs/ObservableKind"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "observable_id": {
+          "minLength": 1,
+          "title": "Observable Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Source Ids",
+          "type": "array"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        },
+        "value": {
+          "title": "Value"
+        }
+      },
+      "required": [
+        "observable_id",
+        "kind",
+        "label",
+        "value"
+      ],
+      "title": "Observable",
+      "type": "object"
+    },
+    "ObservableKind": {
+      "enum": [
+        "scalar",
+        "series",
+        "interval",
+        "constraint_margin",
+        "candidate",
+        "extension"
+      ],
+      "title": "ObservableKind",
+      "type": "string"
+    },
+    "PartNode": {
+      "additionalProperties": false,
+      "properties": {
+        "definition_id": {
+          "title": "Definition Id",
+          "type": "string"
+        },
+        "definition_revision": {
+          "title": "Definition Revision",
+          "type": "string"
+        },
+        "finishes": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/FinishRequirement"
+          },
+          "title": "Finishes",
+          "type": "array"
+        },
+        "geometry": {
+          "$ref": "#/$defs/GeometryProperties"
+        },
+        "geometry_digest": {
+          "title": "Geometry Digest",
+          "type": "string"
+        },
+        "inspections": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/InspectionRequirement"
+          },
+          "title": "Inspections",
+          "type": "array"
+        },
+        "instance_key": {
+          "title": "Instance Key",
+          "type": "string"
+        },
+        "kind": {
+          "const": "part",
+          "default": "part",
+          "title": "Kind",
+          "type": "string"
+        },
+        "manufacturer_part": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ManufacturerPartIdentity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "material_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Material Name"
+        },
+        "node_id": {
+          "title": "Node Id",
+          "type": "string"
+        },
+        "parameter_digest": {
+          "title": "Parameter Digest",
+          "type": "string"
+        },
+        "parameters": {
+          "additionalProperties": true,
+          "title": "Parameters",
+          "type": "object"
+        },
+        "process": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProcessSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "transform": {
+          "$ref": "#/$defs/Transform"
+        }
+      },
+      "required": [
+        "node_id",
+        "instance_key",
+        "definition_id",
+        "definition_revision",
+        "parameter_digest",
+        "geometry_digest",
+        "parameters",
+        "transform",
+        "geometry"
+      ],
+      "title": "PartNode",
+      "type": "object"
+    },
+    "PortInstance": {
+      "additionalProperties": false,
+      "properties": {
+        "frame": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Transform"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "instance_key": {
+          "title": "Instance Key",
+          "type": "string"
+        },
+        "interface": {
+          "discriminator": {
+            "mapping": {
+              "connector": "#/$defs/ConnectorInterface",
+              "electrical": "#/$defs/ElectricalInterface",
+              "feedback": "#/$defs/FeedbackInterface",
+              "mechanical_mount": "#/$defs/MechanicalMountInterface",
+              "shaft": "#/$defs/ShaftInterface",
+              "thermal": "#/$defs/ThermalInterface"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/MechanicalMountInterface"
+            },
+            {
+              "$ref": "#/$defs/ShaftInterface"
+            },
+            {
+              "$ref": "#/$defs/ElectricalInterface"
+            },
+            {
+              "$ref": "#/$defs/FeedbackInterface"
+            },
+            {
+              "$ref": "#/$defs/ThermalInterface"
+            },
+            {
+              "$ref": "#/$defs/ConnectorInterface"
+            }
+          ],
+          "title": "Interface"
+        },
+        "max_connections": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 1,
+          "title": "Max Connections"
+        },
+        "node_id": {
+          "title": "Node Id",
+          "type": "string"
+        },
+        "port_id": {
+          "title": "Port Id",
+          "type": "string"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "role": {
+          "$ref": "#/$defs/PortRole",
+          "default": "bidirectional"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "port_id",
+        "node_id",
+        "instance_key",
+        "interface"
+      ],
+      "title": "PortInstance",
+      "type": "object"
+    },
+    "PortRole": {
+      "enum": [
+        "source",
+        "sink",
+        "bidirectional"
+      ],
+      "title": "PortRole",
+      "type": "string"
+    },
+    "ProcedureRequirement": {
+      "additionalProperties": false,
+      "properties": {
+        "observable_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Observable Ids",
+          "type": "array"
+        },
+        "procedure_id": {
+          "minLength": 1,
+          "title": "Procedure Id",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "revision": {
+          "title": "Revision",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "procedure_id",
+        "revision",
+        "reason"
+      ],
+      "title": "ProcedureRequirement",
+      "type": "object"
+    },
+    "ProcessSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "parameters": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Parameters",
+          "type": "object"
+        },
+        "process_id": {
+          "title": "Process Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "process_id",
+        "name"
+      ],
+      "title": "ProcessSpec",
+      "type": "object"
+    },
+    "Quantity": {
+      "additionalProperties": false,
+      "properties": {
+        "unit": {
+          "$ref": "#/$defs/Unit"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "value",
+        "unit"
+      ],
+      "title": "Quantity",
+      "type": "object"
+    },
+    "ResolvedHardwareGraph": {
+      "additionalProperties": false,
+      "properties": {
+        "connections": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ConnectionEdge"
+          },
+          "title": "Connections",
+          "type": "array"
+        },
+        "containment": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ContainmentEdge"
+          },
+          "title": "Containment",
+          "type": "array"
+        },
+        "nodes": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "assembly": "#/$defs/AssemblyNode",
+                "part": "#/$defs/PartNode"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/AssemblyNode"
+              },
+              {
+                "$ref": "#/$defs/PartNode"
+              }
+            ]
+          },
+          "title": "Nodes",
+          "type": "array"
+        },
+        "ports": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/PortInstance"
+          },
+          "title": "Ports",
+          "type": "array"
+        },
+        "root_id": {
+          "title": "Root Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "root_id",
+        "nodes"
+      ],
+      "title": "ResolvedHardwareGraph",
+      "type": "object"
+    },
+    "Severity": {
+      "enum": [
+        "info",
+        "warning",
+        "error"
+      ],
+      "title": "Severity",
+      "type": "string"
+    },
+    "ShaftInterface": {
+      "additionalProperties": false,
+      "properties": {
+        "diameter": {
+          "$ref": "#/$defs/Tolerance"
+        },
+        "feature": {
+          "default": "plain",
+          "enum": [
+            "plain",
+            "key",
+            "flat",
+            "spline"
+          ],
+          "title": "Feature",
+          "type": "string"
+        },
+        "interface_id": {
+          "title": "Interface Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "shaft",
+          "default": "shaft",
+          "title": "Kind",
+          "type": "string"
+        },
+        "length": {
+          "$ref": "#/$defs/Tolerance"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "interface_id",
+        "diameter",
+        "length"
+      ],
+      "title": "ShaftInterface",
+      "type": "object"
+    },
+    "SourceMapping": {
+      "additionalProperties": false,
+      "properties": {
+        "node_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Node Ids",
+          "type": "array"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "span": {
+          "$ref": "#/$defs/SourceSpan"
+        }
+      },
+      "required": [
+        "source_id",
+        "node_ids",
+        "span"
+      ],
+      "title": "SourceMapping",
+      "type": "object"
+    },
+    "SourceSpan": {
+      "additionalProperties": false,
+      "properties": {
+        "end_byte": {
+          "minimum": 0,
+          "title": "End Byte",
+          "type": "integer"
+        },
+        "end_line": {
+          "minimum": 1,
+          "title": "End Line",
+          "type": "integer"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source_digest": {
+          "title": "Source Digest",
+          "type": "string"
+        },
+        "start_byte": {
+          "minimum": 0,
+          "title": "Start Byte",
+          "type": "integer"
+        },
+        "start_line": {
+          "minimum": 1,
+          "title": "Start Line",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "source_digest",
+        "start_byte",
+        "end_byte",
+        "start_line",
+        "end_line"
+      ],
+      "title": "SourceSpan",
+      "type": "object"
+    },
+    "ThermalInterface": {
+      "additionalProperties": false,
+      "properties": {
+        "ambient_max": {
+          "$ref": "#/$defs/Quantity"
+        },
+        "ambient_min": {
+          "$ref": "#/$defs/Quantity"
+        },
+        "insulation_class": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Insulation Class"
+        },
+        "interface_id": {
+          "title": "Interface Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "thermal",
+          "default": "thermal",
+          "title": "Kind",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "sensor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sensor"
+        }
+      },
+      "required": [
+        "interface_id",
+        "ambient_min",
+        "ambient_max"
+      ],
+      "title": "ThermalInterface",
+      "type": "object"
+    },
+    "Tolerance": {
+      "additionalProperties": false,
+      "properties": {
+        "minus": {
+          "$ref": "#/$defs/Quantity"
+        },
+        "nominal": {
+          "$ref": "#/$defs/Quantity"
+        },
+        "plus": {
+          "$ref": "#/$defs/Quantity"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "nominal",
+        "minus",
+        "plus"
+      ],
+      "title": "Tolerance",
+      "type": "object"
+    },
+    "Transform": {
+      "additionalProperties": false,
+      "properties": {
+        "rotation_degrees_xyz": {
+          "default": [
+            "0",
+            "0",
+            "0"
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                  "type": "string"
+                }
+              ]
+            }
+          ],
+          "title": "Rotation Degrees Xyz",
+          "type": "array"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "translation_mm": {
+          "default": [
+            "0",
+            "0",
+            "0"
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                  "type": "string"
+                }
+              ]
+            }
+          ],
+          "title": "Translation Mm",
+          "type": "array"
+        }
+      },
+      "title": "Transform",
+      "type": "object"
+    },
+    "Unit": {
+      "enum": [
+        "mm",
+        "m",
+        "g",
+        "kg",
+        "V",
+        "A",
+        "ohm",
+        "mH",
+        "H",
+        "N*m",
+        "rpm",
+        "rad/s",
+        "kg*m^2",
+        "g*cm^2",
+        "degC",
+        "W",
+        "g/cm^3",
+        "kg/m^3",
+        "s"
+      ],
+      "title": "Unit",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "artifact_manifest_digest": {
+      "title": "Artifact Manifest Digest",
+      "type": "string"
+    },
+    "control_configuration": {
+      "additionalProperties": true,
+      "title": "Control Configuration",
+      "type": "object"
+    },
+    "dependencies": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/DependencyRecord"
+      },
+      "title": "Dependencies",
+      "type": "array"
+    },
+    "diagnostics": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Diagnostic"
+      },
+      "title": "Diagnostics",
+      "type": "array"
+    },
+    "evidence_requirements": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/EvidenceRequirement"
+      },
+      "title": "Evidence Requirements",
+      "type": "array"
+    },
+    "generation": {
+      "minimum": 0,
+      "title": "Generation",
+      "type": "integer"
+    },
+    "graph": {
+      "$ref": "#/$defs/ResolvedHardwareGraph"
+    },
+    "graph_digest": {
+      "title": "Graph Digest",
+      "type": "string"
+    },
+    "meshes": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/MeshReference"
+      },
+      "title": "Meshes",
+      "type": "array"
+    },
+    "observables": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Observable"
+      },
+      "title": "Observables",
+      "type": "array"
+    },
+    "provenance": {
+      "$ref": "#/$defs/EvaluationProvenance"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_mappings": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/SourceMapping"
+      },
+      "title": "Source Mappings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "generation",
+    "graph_digest",
+    "artifact_manifest_digest",
+    "graph",
+    "provenance"
+  ],
+  "title": "EvaluationSnapshot",
+  "type": "object"
+}

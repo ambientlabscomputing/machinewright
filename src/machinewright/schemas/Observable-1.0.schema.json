@@ -1,0 +1,92 @@
+{
+  "$defs": {
+    "ObservableKind": {
+      "enum": [
+        "scalar",
+        "series",
+        "interval",
+        "constraint_margin",
+        "candidate",
+        "extension"
+      ],
+      "title": "ObservableKind",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "extension_schema": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Extension Schema"
+    },
+    "feasible": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Feasible"
+    },
+    "kind": {
+      "$ref": "#/$defs/ObservableKind"
+    },
+    "label": {
+      "title": "Label",
+      "type": "string"
+    },
+    "observable_id": {
+      "minLength": 1,
+      "title": "Observable Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_ids": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Source Ids",
+      "type": "array"
+    },
+    "unit": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Unit"
+    },
+    "value": {
+      "title": "Value"
+    }
+  },
+  "required": [
+    "observable_id",
+    "kind",
+    "label",
+    "value"
+  ],
+  "title": "Observable",
+  "type": "object"
+}

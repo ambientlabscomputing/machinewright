@@ -3,20 +3,36 @@
 import json
 from pathlib import Path
 
-from machinewright.contracts import MotorRequirement, MotorSpec, Quantity, Tolerance
+from machinewright.contracts import (
+    DutyCycleRating,
+    MotorOperatingPoint,
+    MotorRequirement,
+    MotorSpec,
+    Quantity,
+    Tolerance,
+)
+from machinewright.evaluation import EvaluationSnapshot
 from machinewright.export_service import ExportRequest, ExportResult
 from machinewright.hardware_graph import ResolvedHardwareGraph
 from machinewright.lib.bom import BOM
+from machinewright.project import ProjectConfig
+from machinewright.templates import EvidenceRequirement, Observable
 
 MODELS = (
     Quantity,
     Tolerance,
     MotorSpec,
     MotorRequirement,
+    MotorOperatingPoint,
+    DutyCycleRating,
     ResolvedHardwareGraph,
     BOM,
     ExportRequest,
     ExportResult,
+    EvaluationSnapshot,
+    ProjectConfig,
+    Observable,
+    EvidenceRequirement,
 )
 
 

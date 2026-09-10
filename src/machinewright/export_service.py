@@ -6,6 +6,7 @@ from collections.abc import Callable
 from enum import StrEnum
 import hashlib
 from pathlib import Path
+import re
 import shutil
 import sys
 import threading
@@ -15,7 +16,7 @@ from cadquery import exporters
 from pydantic import Field
 
 from machinewright.assemblies.base import AssemblyDefinition
-from machinewright.canonical import canonical_json
+from machinewright.canonical import canonical_json, content_digest
 from machinewright.contracts import Contract
 from machinewright.diagnostics import (
     Diagnostic,
@@ -23,6 +24,7 @@ from machinewright.diagnostics import (
     Severity,
     ValidationReport,
 )
+from machinewright.hardware_graph import ResolvedDesign
 from machinewright.lib.bom import generate_structured_bom, write_bom_csv
 from machinewright.lib.cadq import exports
 from machinewright.lib.layout import layout_for_printing
@@ -138,8 +140,48 @@ def _digest(path: Path) -> str:
     return "sha256:" + sha.hexdigest()
 
 
+def _normalize_step_metadata(path: Path) -> None:
+    """Remove process-local metadata emitted by Open CASCADE's STEP writer.
+
+    Open CASCADE increments document and assembly-occurrence counters for the
+    lifetime of the process.  They are labels rather than geometry identities,
+    but leaving them in the file makes identical exports hash differently when
+    more than one document is written by a long-lived evaluator.
+    """
+
+    source = path.read_text(encoding="utf-8")
+    normalized, replacements = re.subn(
+        r"(FILE_NAME\('[^']*',)'[^']*'",
+        r"\1'1970-01-01T00:00:00'",
+        source,
+        count=1,
+    )
+    if replacements != 1:
+        raise ValueError("STEP export did not contain the expected FILE_NAME metadata")
+
+    normalized = re.sub(
+        r"(Open CASCADE STEP translator [^']*? )\d+((?:\.\d+)*)'",
+        r"\g<1>1\2'",
+        normalized,
+    )
+
+    occurrence = 0
+
+    def normalize_occurrence(match: re.Match[str]) -> str:
+        nonlocal occurrence
+        occurrence += 1
+        return f"{match.group(1)}'{occurrence}'"
+
+    normalized = re.sub(
+        r"(NEXT_ASSEMBLY_USAGE_OCCURRENCE\(\s*)'\d+'",
+        normalize_occurrence,
+        normalized,
+    )
+    path.write_text(normalized, encoding="utf-8", newline="\n")
+
+
 def export_artifacts(  # noqa: C901 - one transactional artifact pipeline
-    assembly: AssemblyDefinition,
+    assembly: AssemblyDefinition | ResolvedDesign,
     output_directory: str | Path,
     request: ExportRequest | None = None,
     *,
@@ -160,7 +202,11 @@ def export_artifacts(  # noqa: C901 - one transactional artifact pipeline
     shutil.rmtree(scratch, ignore_errors=True)
     scratch.mkdir(parents=True)
     started = time.monotonic()
-    design = assembly.resolve(root_id=request.basename)
+    design = (
+        assembly
+        if isinstance(assembly, ResolvedDesign)
+        else assembly.resolve(root_id=request.basename)
+    )
     graph = design.graph
     part_count = sum(node.kind == "part" for node in graph.nodes)
     if part_count > request.limits.max_parts:
@@ -178,6 +224,10 @@ def export_artifacts(  # noqa: C901 - one transactional artifact pipeline
             ),
         )
     formats = tuple(dict.fromkeys(request.formats))
+    if ExportFormat.MANIFEST_JSON in formats:
+        formats = tuple(
+            item for item in formats if item != ExportFormat.MANIFEST_JSON
+        ) + (ExportFormat.MANIFEST_JSON,)
     artifacts: list[ArtifactResult] = []
 
     def checkpoint(index: int, kind: ExportFormat) -> Path:
@@ -226,10 +276,15 @@ def export_artifacts(  # noqa: C901 - one transactional artifact pipeline
         for index, kind in enumerate(formats):
             path = checkpoint(index, kind)
             if kind == ExportFormat.STEP:
-                design.assembly().export(
+                # Export the canonical compound instead of a CadQuery Assembly.
+                # Assembly export injects random UUIDs and emits presentation
+                # records in nondeterministic order across identical processes.
+                exporters.export(
+                    design.cad(),
                     str(path),
                     exportType=exporters.ExportTypes.STEP,  # type: ignore[arg-type]
                 )
+                _normalize_step_metadata(path)
             elif kind == ExportFormat.STL:
                 exporters.export(
                     design.cad(),
@@ -260,11 +315,28 @@ def export_artifacts(  # noqa: C901 - one transactional artifact pipeline
             elif kind == ExportFormat.HARDWARE_GRAPH_DOT:
                 path.write_text(graph.to_dot(), encoding="utf-8")
             elif kind == ExportFormat.MANIFEST_JSON:
-                manifest = {
+                portable_artifacts = [
+                    {
+                        "kind": item.kind,
+                        "media_type": item.media_type,
+                        "name": Path(item.path).name,
+                        "byte_size": item.byte_size,
+                        "digest": item.digest,
+                    }
+                    for item in artifacts
+                ]
+                logical_payload = {
                     "schema_version": "1.0",
                     "graph_digest": graph.graph_digest,
-                    "artifacts": [item.model_dump(mode="json") for item in artifacts],
-                    "limits": request.limits.model_dump(mode="json"),
+                    "artifacts": portable_artifacts,
+                    "export_settings": {
+                        "stl_tolerance": request.stl_tolerance,
+                        "stl_angular_tolerance": request.stl_angular_tolerance,
+                    },
+                }
+                manifest = {
+                    **logical_payload,
+                    "logical_digest": content_digest(logical_payload),
                 }
                 path.write_text(canonical_json(manifest) + "\n", encoding="utf-8")
             size = path.stat().st_size

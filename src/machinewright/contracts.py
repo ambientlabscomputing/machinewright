@@ -32,6 +32,7 @@ class Dimension(StrEnum):
     TEMPERATURE = "temperature"
     POWER = "power"
     DENSITY = "density"
+    TIME = "time"
 
 
 class Unit(StrEnum):
@@ -53,6 +54,7 @@ class Unit(StrEnum):
     W = "W"
     G_CM3 = "g/cm^3"
     KG_M3 = "kg/m^3"
+    S = "s"
 
 
 _UNIT: dict[Unit, tuple[Dimension, Decimal]] = {
@@ -74,6 +76,7 @@ _UNIT: dict[Unit, tuple[Dimension, Decimal]] = {
     Unit.W: (Dimension.POWER, Decimal(1)),
     Unit.G_CM3: (Dimension.DENSITY, Decimal("1000")),
     Unit.KG_M3: (Dimension.DENSITY, Decimal(1)),
+    Unit.S: (Dimension.TIME, Decimal(1)),
 }
 
 
@@ -288,6 +291,50 @@ InterfaceSpec = Annotated[
 ]
 
 
+class MotorOperatingPoint(Contract):
+    """A guaranteed torque envelope at or below a stated motor speed."""
+
+    speed: Quantity
+    continuous_torque: Quantity
+    peak_torque: Quantity
+
+    @model_validator(mode="after")
+    def physical_dimensions(self) -> MotorOperatingPoint:
+        if self.speed.dimension != Dimension.ANGULAR_SPEED:
+            raise ValueError("operating-point speed must use angular-speed units")
+        if (
+            self.continuous_torque.dimension != Dimension.TORQUE
+            or self.peak_torque.dimension != Dimension.TORQUE
+        ):
+            raise ValueError("operating-point torque must use torque units")
+        if self.peak_torque.canonical_value() < self.continuous_torque.canonical_value():
+            raise ValueError("peak torque must not be below continuous torque")
+        return self
+
+
+class DutyCycleRating(Contract):
+    """Generic duty capability used for compatibility screening.
+
+    Qualification evidence and machine-specific load spectra intentionally remain
+    outside Machinewright.
+    """
+
+    cycle_id: str = Field(min_length=1)
+    duration: Quantity
+    on_fraction: Decimal = Field(ge=0, le=1)
+    ambient_max: Quantity
+
+    @model_validator(mode="after")
+    def physical_dimensions(self) -> DutyCycleRating:
+        if self.duration.dimension != Dimension.TIME:
+            raise ValueError("duty duration must use time units")
+        if self.duration.canonical_value() <= 0:
+            raise ValueError("duty duration must be positive")
+        if self.ambient_max.dimension != Dimension.TEMPERATURE:
+            raise ValueError("duty ambient maximum must use temperature units")
+        return self
+
+
 class MotorSpec(Contract):
     identity: ManufacturerPartIdentity
     datasheet_revision: str
@@ -303,6 +350,8 @@ class MotorSpec(Contract):
     back_emf_constant: Decimal | None = None
     brake: str | None = None
     interfaces: tuple[InterfaceSpec, ...]
+    torque_speed_curve: tuple[MotorOperatingPoint, ...] = ()
+    duty_cycle: DutyCycleRating | None = None
 
     @property
     def content_digest(self) -> str:
@@ -349,6 +398,8 @@ class MotorRequirement(Contract):
     peak_torque: QuantityConstraint | None = None
     max_speed: QuantityConstraint | None = None
     required_interfaces: tuple[InterfaceSpec, ...] = ()
+    required_operating_points: tuple[MotorOperatingPoint, ...] = ()
+    duty_cycle: DutyCycleRating | None = None
 
 
 def _quantity_check(
@@ -516,7 +567,7 @@ def interfaces_compatible(
     return False
 
 
-def evaluate_motor_compatibility(
+def evaluate_motor_compatibility(  # noqa: C901
     spec: MotorSpec, requirement: MotorRequirement
 ) -> ValidationReport:
     diagnostics: list[Diagnostic] = []
@@ -541,8 +592,8 @@ def evaluate_motor_compatibility(
         )
     offered = {(item.kind, item.interface_id): item for item in spec.interfaces}
     for required in requirement.required_interfaces:
-        candidate = offered.get((required.kind, required.interface_id))
-        if candidate is None:
+        offered_interface = offered.get((required.kind, required.interface_id))
+        if offered_interface is None:
             diagnostics.append(
                 Diagnostic(
                     code="motor.interface_missing",
@@ -551,13 +602,72 @@ def evaluate_motor_compatibility(
                     source_path=f"$.interfaces.{required.interface_id}",
                 )
             )
-        elif not interfaces_compatible(candidate, required):
+        elif not interfaces_compatible(offered_interface, required):
             diagnostics.append(
                 Diagnostic(
                     code="motor.interface_mismatch",
                     severity=Severity.ERROR,
                     message=f"{required.kind} interface does not match",
                     source_path=f"$.interfaces.{required.interface_id}",
+                )
+            )
+
+    for index, required_point in enumerate(requirement.required_operating_points):
+        candidates = (
+            spec.torque_speed_curve
+            if spec.torque_speed_curve
+            else (
+                MotorOperatingPoint(
+                    speed=spec.max_speed,
+                    continuous_torque=spec.continuous_torque,
+                    peak_torque=spec.peak_torque,
+                ),
+            )
+        )
+        covered = any(
+            operating_point.speed.canonical_value()
+            >= required_point.speed.canonical_value()
+            and operating_point.continuous_torque.canonical_value()
+            >= required_point.continuous_torque.canonical_value()
+            and operating_point.peak_torque.canonical_value()
+            >= required_point.peak_torque.canonical_value()
+            for operating_point in candidates
+        )
+        if not covered:
+            diagnostics.append(
+                Diagnostic(
+                    code="motor.operating_point_unmet",
+                    severity=Severity.ERROR,
+                    message="required torque-speed operating point is not covered",
+                    source_path=f"$.required_operating_points.{index}",
+                )
+            )
+
+    if requirement.duty_cycle is not None:
+        offered_duty = spec.duty_cycle
+        required_duty = requirement.duty_cycle
+        if offered_duty is None:
+            diagnostics.append(
+                Diagnostic(
+                    code="motor.duty_cycle_missing",
+                    severity=Severity.ERROR,
+                    message="motor has no duty-cycle rating",
+                    source_path="$.duty_cycle",
+                )
+            )
+        elif not (
+            offered_duty.duration.canonical_value()
+            >= required_duty.duration.canonical_value()
+            and offered_duty.on_fraction >= required_duty.on_fraction
+            and offered_duty.ambient_max.canonical_value()
+            >= required_duty.ambient_max.canonical_value()
+        ):
+            diagnostics.append(
+                Diagnostic(
+                    code="motor.duty_cycle_unmet",
+                    severity=Severity.ERROR,
+                    message="motor duty-cycle rating does not cover the requirement",
+                    source_path="$.duty_cycle",
                 )
             )
     return ValidationReport(diagnostics=tuple(diagnostics))

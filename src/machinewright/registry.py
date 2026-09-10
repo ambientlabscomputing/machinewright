@@ -45,6 +45,14 @@ def raw_registry() -> dict[str, dict]:
     }
 
 
+def clear_registry() -> None:
+    """Clear process registrations before a worker reloads a project."""
+
+    _OBJECTS.clear()
+    _ASSEMBLIES.clear()
+    get_registry.cache_clear()
+
+
 @lru_cache
 def get_registry():
     registry_ = raw_registry()

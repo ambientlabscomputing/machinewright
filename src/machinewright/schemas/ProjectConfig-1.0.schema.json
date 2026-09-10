@@ -1,0 +1,153 @@
+{
+  "$defs": {
+    "GoldenEvaluation": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_graph_digest": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Graph Digest"
+        },
+        "expected_manifest_digest": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Manifest Digest"
+        },
+        "inputs": {
+          "title": "Inputs",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "template_id": {
+          "title": "Template Id",
+          "type": "string"
+        },
+        "template_version": {
+          "title": "Template Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "template_id",
+        "template_version",
+        "inputs"
+      ],
+      "title": "GoldenEvaluation",
+      "type": "object"
+    },
+    "TemplateEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "cacheable": {
+          "default": false,
+          "title": "Cacheable",
+          "type": "boolean"
+        },
+        "callable": {
+          "title": "Callable",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "callable"
+      ],
+      "title": "TemplateEntry",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "assets": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Assets",
+      "type": "array"
+    },
+    "environment_lock": {
+      "title": "Environment Lock",
+      "type": "string"
+    },
+    "golden_evaluations": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/GoldenEvaluation"
+      },
+      "title": "Golden Evaluations",
+      "type": "array"
+    },
+    "input_configurations": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Input Configurations",
+      "type": "array"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "templates": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/TemplateEntry"
+      },
+      "title": "Templates",
+      "type": "array"
+    }
+  },
+  "required": [
+    "project_id",
+    "environment_lock"
+  ],
+  "title": "ProjectConfig",
+  "type": "object"
+}

@@ -90,6 +90,51 @@ machinewright export bom "assemblies.your_package.assemblies.Product" --location
 machinewright export bundle "assemblies.your_package.assemblies.Product" --location artifacts/
 ```
 
+## Portable machine templates
+
+Projects that expose typed hardware functions add a `machinewright.toml` beside
+their `pyproject.toml` and lock file. Templates are ordinary Python callables:
+
+```python
+from machinewright import HardwareResult, machine_template
+
+@machine_template(id="example.axis", version="1.0.0", cacheable=True)
+def axis(requirements: AxisRequirements) -> HardwareResult:
+    ...
+```
+
+The same headless evaluator is used by the CLI, isolated worker, CI, and native
+application:
+
+```bash
+machinewright project validate
+machinewright project schema example.axis 1.0.0 schema.json
+machinewright project evaluate example.axis 1.0.0 inputs.json artifacts/
+machinewright project sweep example.axis 1.0.0 inputs.json requirements.payload_kg 8 30 100 sweep/
+```
+
+`machinewright-worker` exposes the evaluator through the versioned Protobuf
+contract in `proto/machinewright_worker.proto`. Worker stdout is reserved for
+length-delimited protocol messages; logs and tracebacks use stderr or structured
+failure events.
+
+## Native editor
+
+The native application uses Floem as an adapter around the framework-neutral
+`machinewright-app` ports. It opens and edits a Python source file, tracks and
+saves rope-backed changes, evaluates unsaved overlays after a 300 ms debounce,
+and retains the last valid snapshot when a newer generation fails. The graph
+panel and GPU-backed projected geometry view share component selection and show
+the selected source mapping. A pinned `ty` language server runs behind the
+framework-neutral language port and reports diagnostics for unsaved buffers.
+
+```bash
+cd native
+MACHINEWRIGHT_WORKER=../.venv/bin/machinewright-worker \
+  cargo run -p machinewright-floem --bin machinewright-floem -- \
+  ../examples/reference_project.py
+```
+
 A bundle can contain STEP, STL, preview SVG, print-layout STL, structured BOM
 JSON, BOM CSV, canonical hardware-graph JSON, Graphviz DOT, and a provenance
 manifest. Logical digests are derived from canonical graph content rather than
