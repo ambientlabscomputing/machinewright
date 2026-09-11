@@ -65,12 +65,24 @@ message PartialDiagnostics {
   bytes diagnostics_json = 3;
 }
 
+message SourceDigest {
+  string relative_path = 1;
+  string digest = 2;
+}
+
 message EvaluationCompleted {
   string session_id = 1;
   uint64 generation = 2;
   string snapshot_path = 3;
   string graph_digest = 4;
   string artifact_manifest_digest = 5;
+  // Digest of every project file the worker actually read while producing
+  // this evaluation (the materialized overlay root, including files not
+  // themselves overlaid) — lets a caller that independently reads the
+  // project tree for caching detect a concurrent external edit that
+  // diverged from what was actually evaluated, without transferring full
+  // source bytes back over the protocol.
+  repeated SourceDigest evaluated_sources = 6;
 }
 
 message EvaluationFailed {

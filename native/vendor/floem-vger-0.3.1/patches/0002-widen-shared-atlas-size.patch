@@ -1,0 +1,20 @@
+--- a/src/glyphs.rs
++++ b/src/glyphs.rs
+@@ -42,7 +42,16 @@
+ 
+ impl GlyphCache {
+     pub fn new(device: &wgpu::Device) -> Self {
+-        let size = 1024;
++        // Large, since this atlas is shared between UI glyphs/icons and any
++        // full-size images drawn through `draw_img` (e.g. a live-updating
++        // viewport frame). The packer never frees individual regions, only
++        // a full clear (see get_image_mask/get_svg_mask) — at the old 1024
++        // size, a single ~800x600 frame with a fresh hash on every render
++        // (e.g. every camera move) could never coexist with its predecessor,
++        // forcing a full atlas clear (and full glyph re-rasterization) on
++        // nearly every frame. Sized generously so that class of workload
++        // gets many frames of headroom before a clear is ever needed.
++        let size = 4096;
+         Self {
+             size,
+             mask_atlas: Atlas::new(device, AtlasContent::Mask, size, size),

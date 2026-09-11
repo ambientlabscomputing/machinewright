@@ -34,10 +34,20 @@ impl ArtifactCache {
     pub fn put(&self, bytes: &[u8]) -> Result<String, CacheError> {
         fs::create_dir_all(&self.root)?;
         let digest = hex_digest(bytes);
+        let sha_digest = format!("sha256:{digest}");
         let target = self.root.join(&digest);
         if target.exists() {
-            self.verify_path(&target, &format!("sha256:{digest}"))?;
-            return Ok(format!("sha256:{digest}"));
+            if self.verify_path(&target, &sha_digest).is_ok() {
+                return Ok(sha_digest);
+            }
+            // The object already on disk under this content-addressed path
+            // is corrupt (its bytes no longer hash to its own filename) —
+            // but the caller just handed us known-good bytes for this exact
+            // digest. Quarantine the corrupt copy and fall through to write
+            // the good one in its place, rather than failing whatever
+            // evaluation is trying to cache this artifact over stale
+            // on-disk corruption we can trivially regenerate from source.
+            let _ = self.quarantine(&sha_digest);
         }
         let temporary = self.root.join(format!(
             ".{digest}.tmp-{}-{}",
@@ -112,6 +122,13 @@ pub struct SnapshotRecord {
     pub source_blobs: BTreeMap<String, PathBuf>,
     pub source_paths: BTreeMap<String, String>,
     pub cache_hit: bool,
+    /// False only for an `import` whose generation was superseded by an
+    /// already-accepted newer one under the store lock: the snapshot object
+    /// itself is still staged as a valid immutable cache entry (this
+    /// `SnapshotRecord` is real and usable), it just didn't become the
+    /// accepted last-valid pointer. Always true for a `restore`d record,
+    /// since restoring the pointer implies it was already accepted.
+    pub promoted_last_valid: bool,
 }
 
 pub struct SnapshotImport<'a> {
@@ -252,29 +269,51 @@ impl SnapshotStore {
             .collect::<BTreeMap<_, _>>();
         artifact_digests.sort();
         artifact_digests.dedup();
+        let promoted_last_valid;
         {
-            // Promoting the staged snapshot directory and writing the
-            // last-valid pointer must be serialized across processes, not
-            // just threads within this one: two Machinewright instances (or
-            // an instance and a CLI invocation) sharing a cache root could
-            // otherwise interleave these steps and leave a pointer
-            // referencing a half-promoted or superseded snapshot.
+            // Promoting the staged snapshot directory and checking+writing
+            // the last-valid pointer must be serialized across processes,
+            // not just threads within this one: two Machinewright instances
+            // (or an instance and a CLI invocation) sharing a cache root
+            // could otherwise interleave these steps and leave a pointer
+            // referencing a half-promoted or superseded snapshot. The
+            // generation re-check happens under the same lock as the
+            // pointer write (not just before staging, which main.rs's own
+            // pre-check already does as a cheap early exit) so a newer
+            // import that finishes staging first always wins regardless of
+            // which import's staging phase happened to run first.
             let _lock = self.lock_store()?;
             if !snapshot_root.exists() {
                 fs::rename(&staging.path, &snapshot_root)?;
                 staging.promoted = true;
             }
-            self.write_last(
-                project_key,
-                &LastValidReference {
-                    snapshot_key,
-                    session_id: session_id.into(),
-                    requested_generation: generation,
-                    environment_digest: environment_digest.into(),
-                    artifact_digests: artifact_digests.clone(),
-                    sources: source_index.clone(),
-                },
-            )?;
+            // `generation` is a `ProjectSession`-local counter that restarts
+            // at 0/1 on every launch, not a value comparable across
+            // sessions — comparing it against a pointer left by a *different*
+            // session_id (the overwhelmingly common case: any earlier run of
+            // the app, or of a CLI invocation) would near-permanently refuse
+            // to promote a fresh session's very first evaluation, since a
+            // prior session's generation is almost always numerically higher
+            // than a new session's 1. Only reject when the existing pointer
+            // is from the *same* session and this generation doesn't
+            // supersede it — that's the actual race this guards against.
+            let accepted = self.read_last(project_key).ok().flatten();
+            promoted_last_valid = accepted.as_ref().is_none_or(|reference| {
+                reference.session_id != session_id || generation > reference.requested_generation
+            });
+            if promoted_last_valid {
+                self.write_last(
+                    project_key,
+                    &LastValidReference {
+                        snapshot_key,
+                        session_id: session_id.into(),
+                        requested_generation: generation,
+                        environment_digest: environment_digest.into(),
+                        artifact_digests: artifact_digests.clone(),
+                        sources: source_index.clone(),
+                    },
+                )?;
+            }
         }
         let record = SnapshotRecord {
             snapshot,
@@ -285,6 +324,7 @@ impl SnapshotStore {
             source_blobs: source_paths,
             source_paths: source_index,
             cache_hit: false,
+            promoted_last_valid,
         };
         Ok((record, self.lease(artifact_digests)))
     }
@@ -303,14 +343,9 @@ impl SnapshotStore {
         project_key: &str,
     ) -> Result<Option<(SnapshotRecord, CacheLease)>, CacheError> {
         let path = self.last_path(project_key)?;
-        if !path.is_file() {
-            return Ok(None);
-        }
-        let reference: LastValidReference = match fs::read(&path)
-            .map_err(CacheError::from)
-            .and_then(|bytes| serde_json::from_slice(&bytes).map_err(CacheError::from))
-        {
-            Ok(reference) => reference,
+        let reference = match self.read_last(project_key) {
+            Ok(Some(reference)) => reference,
+            Ok(None) => return Ok(None),
             Err(error) => {
                 self.quarantine_pointer(&path);
                 return Err(error);
@@ -372,6 +407,7 @@ impl SnapshotStore {
             source_blobs,
             source_paths: reference.sources.clone(),
             cache_hit: true,
+            promoted_last_valid: true,
         };
         Ok((record, self.lease(reference.artifact_digests.clone())))
     }
@@ -491,6 +527,21 @@ impl SnapshotStore {
             active: Arc::clone(&self.active),
             digests,
         }
+    }
+
+    /// The current last-valid pointer for `project_key`, if any. Errors are
+    /// I/O or parse failures reading the pointer file itself — callers that
+    /// want the existing self-healing "quarantine and treat as absent"
+    /// behavior on corruption (like `restore`) still need to handle that
+    /// themselves; a caller that only needs a best-effort generation check
+    /// (like `import`'s acceptance race) can simply ignore the error.
+    fn read_last(&self, project_key: &str) -> Result<Option<LastValidReference>, CacheError> {
+        let path = self.last_path(project_key)?;
+        if !path.is_file() {
+            return Ok(None);
+        }
+        let bytes = fs::read(&path)?;
+        Ok(Some(serde_json::from_slice(&bytes)?))
     }
 
     fn write_last(
@@ -685,6 +736,24 @@ mod tests {
     }
 
     #[test]
+    fn put_self_heals_a_corrupted_existing_object_with_known_good_bytes() {
+        // If the file already on disk under this content-addressed path is
+        // corrupt, `put` must not fail just because the caller happens to
+        // be handing it bytes for a digest that already "exists" on disk —
+        // it has known-good bytes for that exact digest in hand and should
+        // regenerate the object rather than surface the stale corruption as
+        // a failure (this is exactly what happens on every real evaluation
+        // that re-produces a mesh the cache already has a corrupt copy of).
+        let root = tempfile::tempdir().unwrap();
+        let cache = ArtifactCache::new(root.path());
+        let digest = cache.put(b"mesh").unwrap();
+        fs::write(cache.path(&digest).unwrap(), b"wrong").unwrap();
+        let healed = cache.put(b"mesh").unwrap();
+        assert_eq!(healed, digest);
+        assert_eq!(cache.read(&digest).unwrap(), b"mesh");
+    }
+
+    #[test]
     fn imports_and_restores_sources_separately_from_artifacts() {
         let root = tempfile::tempdir().unwrap();
         let (snapshot, artifacts, _) = fixture(root.path(), 7);
@@ -714,6 +783,100 @@ mod tests {
             record.source_blobs.keys().collect::<Vec<_>>(),
             vec![&source_digest]
         );
+    }
+
+    #[test]
+    fn import_never_regresses_the_last_valid_pointer_to_an_older_generation() {
+        let root = tempfile::tempdir().unwrap();
+        let store = SnapshotStore::new(root.path().join("cache"));
+
+        let (snapshot_2, artifacts_2, _) = fixture(&root.path().join("gen2"), 2);
+        let (record_2, lease_2) = store
+            .import(SnapshotImport {
+                project_key: "project",
+                session_id: "session",
+                generation: 2,
+                environment_digest: "sha256:environment",
+                snapshot_path: &snapshot_2,
+                artifact_root: &artifacts_2,
+                sources: &BTreeMap::new(),
+            })
+            .unwrap();
+        assert!(record_2.promoted_last_valid);
+        drop(lease_2);
+
+        // Generation 1's evaluation started earlier but its staging (fs
+        // reads/hashing, done outside the store lock) happens to finish
+        // after generation 2 already won the lock and was accepted. It
+        // must not regress the accepted pointer back to an older result.
+        let (snapshot_1, artifacts_1, _) = fixture(&root.path().join("gen1"), 1);
+        let (record_1, lease_1) = store
+            .import(SnapshotImport {
+                project_key: "project",
+                session_id: "session",
+                generation: 1,
+                environment_digest: "sha256:environment",
+                snapshot_path: &snapshot_1,
+                artifact_root: &artifacts_1,
+                sources: &BTreeMap::new(),
+            })
+            .unwrap();
+        // The superseded import still produces a valid, usable record and
+        // immutable cache entry — it just isn't the accepted pointer.
+        assert!(!record_1.promoted_last_valid);
+        assert_eq!(record_1.snapshot.evaluation().generation, 1);
+        assert!(record_1.artifact_root.is_dir());
+        drop(lease_1);
+
+        let (restored, _lease) = store.restore("project").unwrap().unwrap();
+        assert_eq!(restored.requested_generation, 2);
+        assert_eq!(restored.snapshot.evaluation().generation, 2);
+    }
+
+    #[test]
+    fn import_promotes_a_fresh_sessions_first_generation_over_a_prior_sessions_pointer() {
+        // `generation` is a per-`ProjectSession` counter that restarts at 1
+        // on every app launch — it is not comparable across sessions. A
+        // fresh session's generation 1 must still take over the pointer
+        // even though a *different*, earlier session already left a
+        // numerically higher generation accepted (this is the ordinary
+        // case of simply restarting the app, not a same-session race).
+        let root = tempfile::tempdir().unwrap();
+        let store = SnapshotStore::new(root.path().join("cache"));
+
+        let (snapshot_old, artifacts_old, _) = fixture(&root.path().join("old-session"), 5);
+        let (record_old, lease_old) = store
+            .import(SnapshotImport {
+                project_key: "project",
+                session_id: "session-old",
+                generation: 5,
+                environment_digest: "sha256:environment",
+                snapshot_path: &snapshot_old,
+                artifact_root: &artifacts_old,
+                sources: &BTreeMap::new(),
+            })
+            .unwrap();
+        assert!(record_old.promoted_last_valid);
+        drop(lease_old);
+
+        let (snapshot_new, artifacts_new, _) = fixture(&root.path().join("new-session"), 1);
+        let (record_new, lease_new) = store
+            .import(SnapshotImport {
+                project_key: "project",
+                session_id: "session-new",
+                generation: 1,
+                environment_digest: "sha256:environment",
+                snapshot_path: &snapshot_new,
+                artifact_root: &artifacts_new,
+                sources: &BTreeMap::new(),
+            })
+            .unwrap();
+        assert!(record_new.promoted_last_valid);
+        drop(lease_new);
+
+        let (restored, _lease) = store.restore("project").unwrap().unwrap();
+        assert_eq!(restored.session_id, "session-new");
+        assert_eq!(restored.requested_generation, 1);
     }
 
     #[test]

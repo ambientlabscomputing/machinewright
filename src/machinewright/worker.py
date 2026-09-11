@@ -115,6 +115,20 @@ def _materialize_overlay(request: protocol.EvaluateProject) -> tuple[Path, Path 
     return snapshot, temporary
 
 
+def _evaluated_source_digests(project_root: Path) -> list[protocol.SourceDigest]:
+    ignored = {".git", ".venv", ".mypy_cache", ".pytest_cache", "target", "dist"}
+    digests = []
+    for path in sorted(project_root.rglob("*")):
+        if not path.is_file():
+            continue
+        if any(part in ignored for part in path.relative_to(project_root).parts):
+            continue
+        relative = path.relative_to(project_root).as_posix()
+        digest = "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+        digests.append(protocol.SourceDigest(relative_path=relative, digest=digest))
+    return digests
+
+
 def _clear_modules(project_root: Path) -> None:
     for name, module in tuple(sys.modules.items()):
         source = getattr(module, "__file__", None)
@@ -132,6 +146,14 @@ def _clear_modules(project_root: Path) -> None:
             belongs = False
         if belongs and not name.startswith("machinewright"):
             sys.modules.pop(name, None)
+    # Mirrors the import roots `load_declared_templates` inserts (project_root
+    # and project_root/src); those entries point at a temp overlay root that
+    # is about to be discarded, so leaving them in sys.path would let a later
+    # `import_module` resolve names against a deleted directory.
+    for import_root in (project_root, project_root / "src"):
+        entry = str(import_root)
+        while entry in sys.path:
+            sys.path.remove(entry)
     clear_registry()
     clear_machine_templates()
 
@@ -142,6 +164,11 @@ class Worker:
         self.cancellations: dict[tuple[str, int], CancellationToken] = {}
         self.cancelled_before_start: set[tuple[str, int]] = set()
         self.lock = threading.Lock()
+        # The project root actually materialized (and imported from) by the
+        # previous evaluation, so the next call can evict its modules/sys.path
+        # entries instead of the fixed original project_root, which is never
+        # what gets imported when overlays are present.
+        self._last_project_root: Path | None = None
 
     def evaluate(self, request: protocol.EvaluateProject) -> None:
         token = CancellationToken()
@@ -168,6 +195,7 @@ class Worker:
 
     def _evaluate(self, request: protocol.EvaluateProject, token: CancellationToken) -> None:
         temporary: Path | None = None
+        project_root: Path | None = None
         key = (request.session_id, request.generation)
 
         def progress(item: ExportProgress) -> None:
@@ -186,7 +214,8 @@ class Worker:
 
         try:
             _verify_environment(request)
-            _clear_modules(Path(request.project_root).resolve())
+            if self._last_project_root is not None:
+                _clear_modules(self._last_project_root)
             project_root, temporary = _materialize_overlay(request)
             inputs = json.loads(request.inputs_json)
             outcome = evaluate_project(
@@ -216,6 +245,7 @@ class Worker:
                             snapshot_path=outcome.snapshot_path,
                             graph_digest=outcome.snapshot.graph_digest,
                             artifact_manifest_digest=outcome.snapshot.artifact_manifest_digest,
+                            evaluated_sources=_evaluated_source_digests(project_root),
                         )
                     )
                 )
@@ -248,6 +278,8 @@ class Worker:
         finally:
             with self.lock:
                 self.cancellations.pop(key, None)
+            if project_root is not None:
+                self._last_project_root = project_root
             if temporary is not None:
                 shutil.rmtree(temporary, ignore_errors=True)
 

@@ -163,15 +163,6 @@ def _source_mappings(
 ) -> tuple[SourceMapping, ...]:
     graph = design.graph
     mappings: list[SourceMapping] = []
-    function_span = _source_span(template.function, root)
-    if function_span is not None:
-        mappings.append(
-            SourceMapping(
-                source_id=f"template:{template.template_id}@{template.version}",
-                node_ids=tuple(node.node_id for node in graph.nodes),
-                span=function_span,
-            )
-        )
     for node_id, (path, line) in sorted(design.source_hints.items()):
         span = _line_span(Path(path), line, root)
         if span is not None:
@@ -198,6 +189,18 @@ def _source_mappings(
                     span=span,
                 )
             )
+    # The whole-template mapping is broadest (it covers every node) and is
+    # therefore emitted last: a consumer that takes the first mapping
+    # matching a given node id should land on the narrowest one available.
+    function_span = _source_span(template.function, root)
+    if function_span is not None:
+        mappings.append(
+            SourceMapping(
+                source_id=f"template:{template.template_id}@{template.version}",
+                node_ids=tuple(node.node_id for node in graph.nodes),
+                span=function_span,
+            )
+        )
     return tuple(mappings)
 
 

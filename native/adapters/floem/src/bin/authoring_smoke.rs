@@ -22,7 +22,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let request = session.evaluation_request(output.clone())?;
     let mut worker = WorkerProcess::spawn(worker_path, std::iter::empty::<&str>())?;
     let capabilities = worker.connect()?;
-    let snapshot = worker.evaluate(&request)?;
+    let snapshot = worker.evaluate(&request)?.snapshot;
     session.dispatch(AppCommand::InstallSnapshot(snapshot.clone()))?;
     let scene = Scene::load(&snapshot, &output)?;
     println!(

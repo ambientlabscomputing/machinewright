@@ -1,10 +1,14 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use machinewright_model::{ProjectSnapshot, SelectionState};
-use machinewright_workspace::{ProjectWorkspace, WorkspaceError};
+use machinewright_workspace::{ProjectWorkspace, WorkspaceError, digest};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
+
+pub mod runtime;
+pub use runtime::{EvaluationRuntime, InputIdentity, RuntimeCommand};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkerCapabilities {
@@ -96,6 +100,27 @@ impl PortableProject {
         })
     }
 
+    /// Captures this project's current input/environment identity in one
+    /// read, rather than the piecemeal re-reads `session_evaluation_request`
+    /// does on every call. Not yet wired into that method (which stays as
+    /// today's always-fresh-read behavior); this is the seam a future
+    /// input-selection UI (M3) needs — two captures for the same
+    /// `input_path` compare unequal once the file (or the environment lock)
+    /// changes on disk.
+    pub fn input_identity(&self) -> Result<InputIdentity, PortError> {
+        let input_bytes =
+            std::fs::read(&self.input_path).map_err(|error| PortError::new(error.to_string()))?;
+        let environment_bytes = std::fs::read(&self.environment_lock)
+            .map_err(|error| PortError::new(error.to_string()))?;
+        Ok(InputIdentity {
+            template_id: self.template_id.clone(),
+            template_version: self.template_version.clone(),
+            input_path: self.input_path.clone(),
+            input_digest: format!("sha256:{:x}", Sha256::digest(input_bytes)),
+            environment_digest: format!("sha256:{:x}", Sha256::digest(environment_bytes)),
+        })
+    }
+
     pub fn session_evaluation_request(
         &self,
         session_id: &str,
@@ -126,9 +151,21 @@ impl PortableProject {
     }
 }
 
+/// A successful evaluation plus the digest of every project file the
+/// worker actually read while producing it (relative path, posix-style →
+/// `sha256:...`) — lets a caller that independently reads the project tree
+/// for caching detect a concurrent external edit that diverged from what
+/// was actually evaluated, without the wire protocol carrying full bytes
+/// for files the caller can already read itself.
+#[derive(Debug, Clone)]
+pub struct EvaluationOutcome {
+    pub snapshot: ProjectSnapshot,
+    pub evaluated_source_digests: BTreeMap<String, String>,
+}
+
 pub trait EvaluationPort {
     fn connect(&mut self) -> Result<WorkerCapabilities, PortError>;
-    fn evaluate(&mut self, request: &EvaluationRequest) -> Result<ProjectSnapshot, PortError>;
+    fn evaluate(&mut self, request: &EvaluationRequest) -> Result<EvaluationOutcome, PortError>;
     fn cancel(&mut self, session_id: &str, generation: u64) -> Result<(), PortError>;
 }
 
@@ -223,6 +260,15 @@ pub enum AppCommand {
     },
     InstallSnapshot(ProjectSnapshot),
     RestoreSnapshot(ProjectSnapshot),
+    /// Renames or moves an open document on disk and reconciles it in the
+    /// workspace (document map, tabs, active pointer). For a rename already
+    /// performed externally (detected by the file watcher), reconcile
+    /// directly via `ProjectWorkspace::rename_document` instead — this
+    /// command performs the filesystem rename itself.
+    RenameDocument {
+        from: PathBuf,
+        to: PathBuf,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -235,6 +281,7 @@ pub enum AppEvent {
     ConflictAcknowledged(PathBuf),
     SelectionChanged,
     SnapshotInstalled(u64),
+    DocumentRenamed { from: PathBuf, to: PathBuf },
 }
 
 #[derive(Debug)]
@@ -291,6 +338,51 @@ impl ProjectSession {
             && tag
                 .view_revision
                 .is_none_or(|value| value == self.view_revision)
+    }
+
+    fn apply_stale_source(&self, selection: &mut SelectionState) {
+        selection.stale_source = selection.source_span.as_ref().is_some_and(|span| {
+            let full_path = self.workspace.root().join(&span.path);
+            match self.workspace.document(&full_path) {
+                Some(document) => document.content_digest() != span.source_digest,
+                // The mapped file isn't open — an unopened file with no
+                // in-memory buffer to check was previously always reported
+                // fresh, silently trusting offsets against content that may
+                // have changed on disk since the snapshot was produced.
+                // Fail safe (treat unreadable/missing as stale) rather than
+                // defaulting to fresh.
+                None => std::fs::read(&full_path)
+                    .map(|bytes| digest(&bytes) != span.source_digest)
+                    .unwrap_or(true),
+            }
+        });
+    }
+
+    /// Recomputes the current selection against a newly installed or
+    /// restored snapshot: if the previously selected node still exists
+    /// there, the selection (and its source span) is remapped onto it
+    /// instead of being unconditionally dropped, so an edit or worker
+    /// restart that keeps the node around doesn't silently deselect it.
+    fn remap_selection(&self, snapshot: &ProjectSnapshot) -> SelectionState {
+        let generation = snapshot.evaluation().generation;
+        // Check every node the previous selection owned, not just the
+        // primary: if the primary was removed but a sibling from the same
+        // source mapping survives, remap onto that sibling instead of
+        // dropping the selection entirely.
+        let surviving = self
+            .selection
+            .graph_node_ids
+            .iter()
+            .find(|node_id| snapshot.graph().nodes.contains_key(node_id.as_str()));
+        let mut selection = surviving.map_or_else(
+            || SelectionState {
+                generation,
+                ..SelectionState::default()
+            },
+            |node_id| snapshot.selection_for_node(node_id),
+        );
+        self.apply_stale_source(&mut selection);
+        selection
     }
 
     pub fn dispatch(&mut self, command: AppCommand) -> Result<Vec<AppEvent>, PortError> {
@@ -419,11 +511,7 @@ impl ProjectSession {
                     .map_or_else(SelectionState::default, |snapshot| {
                         snapshot.selection_for_node(&node_id)
                     });
-                selection.stale_source = selection.source_span.as_ref().is_some_and(|span| {
-                    self.workspace
-                        .document(&self.workspace.root().join(&span.path))
-                        .is_some_and(|document| document.content_digest() != span.source_digest)
-                });
+                self.apply_stale_source(&mut selection);
                 self.selection = selection;
                 AppEvent::SelectionChanged
             }
@@ -437,11 +525,7 @@ impl ProjectSession {
                     .map_or_else(SelectionState::default, |snapshot| {
                         snapshot.selection_for_source(&relative_path, byte)
                     });
-                selection.stale_source = selection.source_span.as_ref().is_some_and(|span| {
-                    self.workspace
-                        .document(&self.workspace.root().join(&span.path))
-                        .is_some_and(|document| document.content_digest() != span.source_digest)
-                });
+                self.apply_stale_source(&mut selection);
                 self.selection = selection;
                 AppEvent::SelectionChanged
             }
@@ -450,37 +534,112 @@ impl ProjectSession {
                 if generation != self.generation {
                     return Ok(Vec::new());
                 }
-                self.selection = SelectionState {
-                    generation,
-                    ..SelectionState::default()
-                };
+                self.selection = self.remap_selection(&snapshot);
                 self.snapshot = Some(snapshot);
                 AppEvent::SnapshotInstalled(generation)
             }
             AppCommand::RestoreSnapshot(snapshot) => {
                 let generation = snapshot.evaluation().generation;
-                self.selection = SelectionState {
-                    generation,
-                    ..SelectionState::default()
-                };
+                self.selection = self.remap_selection(&snapshot);
                 self.snapshot = Some(snapshot);
                 AppEvent::SnapshotInstalled(generation)
+            }
+            AppCommand::RenameDocument { from, to } => {
+                let root = self.workspace.root().to_path_buf();
+                let target_parent = to.parent().unwrap_or(&root);
+                let canonical_parent = target_parent
+                    .canonicalize()
+                    .map_err(|error| PortError::new(error.to_string()))?;
+                if !canonical_parent.starts_with(&root) {
+                    return Err(PortError::new("rename target escapes the project"));
+                }
+                std::fs::rename(&from, &to).map_err(|error| PortError::new(error.to_string()))?;
+                let to = to
+                    .canonicalize()
+                    .map_err(|error| PortError::new(error.to_string()))?;
+                self.workspace.rename_document(&from, &to);
+                AppEvent::DocumentRenamed { from, to }
             }
         };
         Ok(vec![event])
     }
+
+    /// Installs (or restores) `snapshot` and returns the one bundle an
+    /// adapter needs to update every dependent view atomically: the
+    /// snapshot's generation and the selection already remapped against it.
+    /// Supersedes calling `dispatch(InstallSnapshot(..))`/
+    /// `dispatch(RestoreSnapshot(..))` directly from adapter code that then
+    /// separately derives UI state from a selection signal captured before
+    /// the remap ran — `Ok(None)` means the snapshot was superseded by a
+    /// newer generation and nothing should be applied.
+    pub fn accept_snapshot(
+        &mut self,
+        snapshot: ProjectSnapshot,
+        restore: bool,
+    ) -> Result<Option<PresentationUpdate>, PortError> {
+        let command = if restore {
+            AppCommand::RestoreSnapshot(snapshot)
+        } else {
+            AppCommand::InstallSnapshot(snapshot)
+        };
+        let events = self.dispatch(command)?;
+        let Some(AppEvent::SnapshotInstalled(generation)) = events.into_iter().next() else {
+            return Ok(None);
+        };
+        Ok(Some(PresentationUpdate {
+            snapshot: self
+                .snapshot
+                .clone()
+                .expect("SnapshotInstalled implies self.snapshot is set"),
+            generation,
+            selection: self.selection.clone(),
+        }))
+    }
 }
 
-#[derive(Debug, Error)]
+/// Bundles everything one accepted evaluation/restore result changes, so an
+/// adapter applies it atomically instead of writing several independent
+/// caches that can disagree about which generation/selection is current.
+/// Produced by `ProjectSession::accept_snapshot`.
+#[derive(Debug, Clone)]
+pub struct PresentationUpdate {
+    pub snapshot: ProjectSnapshot,
+    pub generation: u64,
+    pub selection: SelectionState,
+}
+
+#[derive(Debug, Clone, Error, Default)]
 #[error("{message}")]
 pub struct PortError {
     pub message: String,
+    /// Present only for a structured evaluation failure (see
+    /// `PortError::evaluation_failed`) — the worker's stable diagnostic
+    /// code, traceback, and pre-formatted diagnostics report. `None` for
+    /// every other kind of port error (transport, cancellation, I/O, ...).
+    pub code: Option<String>,
+    pub traceback: Option<String>,
+    pub diagnostics_json: Option<Vec<u8>>,
 }
 
 impl PortError {
     pub fn new(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),
+            ..Self::default()
+        }
+    }
+
+    pub fn evaluation_failed(
+        code: impl Into<String>,
+        message: impl Into<String>,
+        traceback: impl Into<String>,
+        diagnostics_json: Vec<u8>,
+    ) -> Self {
+        Self {
+            message: message.into(),
+            code: Some(code.into()),
+            traceback: Some(traceback.into()),
+            diagnostics_json: Some(diagnostics_json),
         }
     }
 }
@@ -494,6 +653,7 @@ impl From<WorkspaceError> for PortError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     fn project() -> (tempfile::TempDir, PathBuf, PathBuf) {
         let root = tempfile::tempdir().unwrap();
@@ -548,5 +708,330 @@ mod tests {
         assert!(session.accepts(&current));
         session.begin_evaluation();
         assert!(!session.accepts(&current));
+    }
+
+    #[test]
+    fn rename_document_moves_the_file_and_reconciles_the_open_tab() {
+        let (root, first, _) = project();
+        let mut session = ProjectSession::open(&first).unwrap();
+        session
+            .dispatch(AppCommand::OpenDocument(first.clone()))
+            .unwrap();
+        let first = first.canonicalize().unwrap();
+        let renamed = root.path().join("renamed_first.py");
+        let events = session
+            .dispatch(AppCommand::RenameDocument {
+                from: first.clone(),
+                to: renamed.clone(),
+            })
+            .unwrap();
+        assert!(!first.exists());
+        assert!(renamed.exists());
+        let renamed = renamed.canonicalize().unwrap();
+        assert_eq!(
+            events,
+            vec![AppEvent::DocumentRenamed {
+                from: first.clone(),
+                to: renamed.clone(),
+            }]
+        );
+        assert!(session.workspace.document(&renamed).is_some());
+        assert!(session.workspace.document(&first).is_none());
+    }
+
+    #[test]
+    fn rename_document_rejects_a_target_outside_the_project() {
+        let (root, first, _) = project();
+        let mut session = ProjectSession::open(&first).unwrap();
+        session
+            .dispatch(AppCommand::OpenDocument(first.clone()))
+            .unwrap();
+        let first = first.canonicalize().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let escape_target = outside.path().join("escaped.py");
+        let result = session.dispatch(AppCommand::RenameDocument {
+            from: first.clone(),
+            to: escape_target,
+        });
+        assert!(result.is_err());
+        // The file must not have moved.
+        assert!(first.exists());
+        let _ = root;
+    }
+
+    fn snapshot(root: &Path, generation: u64, node_ids: &[&str]) -> ProjectSnapshot {
+        let nodes: Vec<_> = node_ids
+            .iter()
+            .map(|id| {
+                json!({
+                    "node_id": id, "instance_key": id, "kind": "component",
+                    "definition_id": "test.part", "parameters": {}
+                })
+            })
+            .collect();
+        let document = json!({
+            "schema_version": "1.0",
+            "generation": generation,
+            "graph_digest": "sha256:graph",
+            "artifact_manifest_digest": "sha256:manifest",
+            "graph": {"nodes": nodes, "containment": []},
+            "source_mappings": [], "dependencies": [], "diagnostics": [],
+            "meshes": [], "observables": [], "evidence_requirements": [],
+            "control_configuration": {}, "provenance": {}
+        });
+        let path = root.join(format!("snapshot-{generation}.json"));
+        std::fs::write(&path, serde_json::to_vec(&document).unwrap()).unwrap();
+        ProjectSnapshot::load(&path).unwrap()
+    }
+
+    /// Like `snapshot`, but every node shares one source mapping — the
+    /// shape produced when several instances come from the same call site
+    /// — so selecting any one of them should highlight/select all of them.
+    fn snapshot_with_shared_mapping(
+        root: &Path,
+        generation: u64,
+        node_ids: &[&str],
+    ) -> ProjectSnapshot {
+        let nodes: Vec<_> = node_ids
+            .iter()
+            .map(|id| {
+                json!({
+                    "node_id": id, "instance_key": id, "kind": "component",
+                    "definition_id": "test.part", "parameters": {}
+                })
+            })
+            .collect();
+        let document = json!({
+            "schema_version": "1.0",
+            "generation": generation,
+            "graph_digest": "sha256:graph",
+            "artifact_manifest_digest": "sha256:manifest",
+            "graph": {"nodes": nodes, "containment": []},
+            "source_mappings": [{
+                "source_id": "definition:test.part",
+                "node_ids": node_ids,
+                "span": {
+                    "path": "shared.py",
+                    "source_digest": "sha256:shared",
+                    "start_byte": 0, "end_byte": 1,
+                    "start_line": 1, "end_line": 1,
+                },
+            }],
+            "dependencies": [], "diagnostics": [],
+            "meshes": [], "observables": [], "evidence_requirements": [],
+            "control_configuration": {}, "provenance": {}
+        });
+        let path = root.join(format!("shared-snapshot-{generation}.json"));
+        std::fs::write(&path, serde_json::to_vec(&document).unwrap()).unwrap();
+        ProjectSnapshot::load(&path).unwrap()
+    }
+
+    #[test]
+    fn select_node_highlights_every_node_owned_by_the_same_source_mapping() {
+        let (root, first, _) = project();
+        let mut session = ProjectSession::open(&first).unwrap();
+        session.begin_evaluation();
+        session
+            .dispatch(AppCommand::InstallSnapshot(snapshot_with_shared_mapping(
+                root.path(),
+                1,
+                &["a", "b"],
+            )))
+            .unwrap();
+        session
+            .dispatch(AppCommand::SelectNode("a".into()))
+            .unwrap();
+        assert_eq!(session.selection.graph_node_id.as_deref(), Some("a"));
+        let mut owned = session.selection.graph_node_ids.clone();
+        owned.sort();
+        assert_eq!(owned, vec!["a".to_string(), "b".to_string()]);
+    }
+
+    #[test]
+    fn remap_selection_lands_on_a_surviving_sibling_when_the_primary_node_is_removed() {
+        let (root, first, _) = project();
+        let mut session = ProjectSession::open(&first).unwrap();
+        session.begin_evaluation();
+        session
+            .dispatch(AppCommand::InstallSnapshot(snapshot_with_shared_mapping(
+                root.path(),
+                1,
+                &["a", "b"],
+            )))
+            .unwrap();
+        session
+            .dispatch(AppCommand::SelectNode("a".into()))
+            .unwrap();
+
+        session.begin_evaluation();
+        // "a" is gone, but "b" (owned by the same previous selection) is
+        // still present: the selection should remap onto it rather than
+        // being dropped just because the specific clicked node vanished.
+        session
+            .dispatch(AppCommand::InstallSnapshot(snapshot_with_shared_mapping(
+                root.path(),
+                2,
+                &["b"],
+            )))
+            .unwrap();
+        assert_eq!(session.selection.graph_node_id.as_deref(), Some("b"));
+        assert_eq!(session.selection.graph_node_ids, vec!["b".to_string()]);
+    }
+
+    #[test]
+    fn select_node_flags_stale_source_for_an_externally_changed_unopened_file() {
+        let (root, first, second) = project();
+        let mut session = ProjectSession::open(&first).unwrap();
+        session.begin_evaluation();
+        let document = json!({
+            "schema_version": "1.0",
+            "generation": 1,
+            "graph_digest": "sha256:graph",
+            "artifact_manifest_digest": "sha256:manifest",
+            "graph": {
+                "nodes": [json!({
+                    "node_id": "a", "instance_key": "a", "kind": "component",
+                    "definition_id": "test.part", "parameters": {}
+                })],
+                "containment": [],
+            },
+            "source_mappings": [{
+                "source_id": "node:a",
+                "node_ids": ["a"],
+                "span": {
+                    "path": "second.py",
+                    "source_digest": "sha256:mismatch",
+                    "start_byte": 0, "end_byte": 1,
+                    "start_line": 1, "end_line": 1,
+                },
+            }],
+            "dependencies": [], "diagnostics": [],
+            "meshes": [], "observables": [], "evidence_requirements": [],
+            "control_configuration": {}, "provenance": {}
+        });
+        let snapshot_path = root.path().join("stale-snapshot.json");
+        std::fs::write(&snapshot_path, serde_json::to_vec(&document).unwrap()).unwrap();
+        session
+            .dispatch(AppCommand::InstallSnapshot(
+                ProjectSnapshot::load(&snapshot_path).unwrap(),
+            ))
+            .unwrap();
+        // `second` is never opened — apply_stale_source must fall back to a
+        // disk-digest check rather than defaulting to "fresh" just because
+        // there's no in-memory document to compare against.
+        session
+            .dispatch(AppCommand::SelectNode("a".into()))
+            .unwrap();
+        assert!(session.selection.stale_source);
+        assert!(second.is_file());
+    }
+
+    #[test]
+    fn install_snapshot_remaps_selection_when_the_selected_node_still_exists() {
+        let (root, first, _) = project();
+        let mut session = ProjectSession::open(&first).unwrap();
+        session.begin_evaluation();
+        session
+            .dispatch(AppCommand::InstallSnapshot(snapshot(
+                root.path(),
+                1,
+                &["root/part"],
+            )))
+            .unwrap();
+        session
+            .dispatch(AppCommand::SelectNode("root/part".into()))
+            .unwrap();
+        assert_eq!(
+            session.selection.graph_node_id.as_deref(),
+            Some("root/part")
+        );
+
+        session.begin_evaluation();
+        session
+            .dispatch(AppCommand::InstallSnapshot(snapshot(
+                root.path(),
+                2,
+                &["root/part", "root/other"],
+            )))
+            .unwrap();
+        assert_eq!(
+            session.selection.graph_node_id.as_deref(),
+            Some("root/part")
+        );
+        assert_eq!(session.selection.generation, 2);
+    }
+
+    #[test]
+    fn install_snapshot_clears_selection_when_the_selected_node_is_gone() {
+        let (root, first, _) = project();
+        let mut session = ProjectSession::open(&first).unwrap();
+        session.begin_evaluation();
+        session
+            .dispatch(AppCommand::InstallSnapshot(snapshot(
+                root.path(),
+                1,
+                &["root/part"],
+            )))
+            .unwrap();
+        session
+            .dispatch(AppCommand::SelectNode("root/part".into()))
+            .unwrap();
+        assert!(session.selection.graph_node_id.is_some());
+
+        session.begin_evaluation();
+        session
+            .dispatch(AppCommand::InstallSnapshot(snapshot(
+                root.path(),
+                2,
+                &["root/other"],
+            )))
+            .unwrap();
+        assert_eq!(session.selection.graph_node_id, None);
+        assert_eq!(session.selection.generation, 2);
+    }
+
+    #[test]
+    fn install_snapshot_leaves_selection_at_default_when_nothing_was_selected() {
+        let (root, first, _) = project();
+        let mut session = ProjectSession::open(&first).unwrap();
+        session.begin_evaluation();
+        session
+            .dispatch(AppCommand::InstallSnapshot(snapshot(
+                root.path(),
+                1,
+                &["root/part"],
+            )))
+            .unwrap();
+        assert_eq!(session.selection.graph_node_id, None);
+        assert_eq!(session.selection.generation, 1);
+    }
+
+    #[test]
+    fn restore_snapshot_also_remaps_selection_onto_the_restored_snapshot() {
+        let (root, first, _) = project();
+        let mut session = ProjectSession::open(&first).unwrap();
+        session.begin_evaluation();
+        session
+            .dispatch(AppCommand::InstallSnapshot(snapshot(
+                root.path(),
+                1,
+                &["root/part"],
+            )))
+            .unwrap();
+        session
+            .dispatch(AppCommand::SelectNode("root/part".into()))
+            .unwrap();
+
+        session
+            .dispatch(AppCommand::RestoreSnapshot(snapshot(
+                root.path(),
+                1,
+                &["root/part"],
+            )))
+            .unwrap();
+        assert_eq!(
+            session.selection.graph_node_id.as_deref(),
+            Some("root/part")
+        );
     }
 }

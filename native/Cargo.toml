@@ -12,6 +12,7 @@ members = [
     "crates/machinewright-language",
     "crates/machinewright-editor",
     "adapters/floem",
+    "benches",
 ]
 
 [workspace.package]
@@ -26,3 +27,14 @@ serde_json = "1"
 sha2 = "0.10"
 thiserror = "2"
 tempfile = "3"
+
+# floem-vger's shared glyph/image atlas uses a bump allocator that never frees
+# individual regions; a single large, continuously-updating image (our 3D
+# viewport frame, re-uploaded with a fresh content hash on every render) can
+# permanently exhaust it once a second distinct frame can no longer be packed
+# alongside the first, silently and permanently blanking that view with no
+# error. Vendored fix: reclaim the whole atlas and retry once on a pack
+# failure instead of caching the failure forever. See
+# native/vendor/floem-vger-0.3.1/src/glyphs.rs.
+[patch.crates-io]
+floem-vger = { path = "vendor/floem-vger-0.3.1" }

@@ -95,6 +95,10 @@ smoke: ## Headless end-to-end sanity check: evaluate the reference project once
 	$(CARGO) run --manifest-path $(NATIVE_MANIFEST) -p machinewright-floem --bin authoring_smoke -- \
 		$(REFERENCE_PROJECT) $(WORKER)
 
+.PHONY: bench
+bench: ## Run performance benchmarks against RFD-19's reference workloads
+	$(CARGO) bench --manifest-path $(NATIVE_MANIFEST) -p machinewright-benches
+
 ## --- Everything ---------------------------------------------------------
 
 .PHONY: ci

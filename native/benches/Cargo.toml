@@ -1,0 +1,42 @@
+[package]
+name = "machinewright-benches"
+version = "0.1.0"
+edition.workspace = true
+publish = false
+autobenches = false
+
+[dependencies]
+criterion = "0.5"
+pollster = "0.3"
+serde_json.workspace = true
+tempfile.workspace = true
+machinewright-app = { path = "../crates/machinewright-app" }
+machinewright-evaluator = { path = "../crates/machinewright-evaluator" }
+machinewright-model = { path = "../crates/machinewright-model" }
+machinewright-render = { path = "../crates/machinewright-render" }
+machinewright-workspace = { path = "../crates/machinewright-workspace" }
+
+[[bench]]
+name = "render"
+path = "benches/render.rs"
+harness = false
+
+[[bench]]
+name = "graph"
+path = "benches/graph.rs"
+harness = false
+
+[[bench]]
+name = "editing"
+path = "benches/editing.rs"
+harness = false
+
+[[bench]]
+name = "worker_restart"
+path = "benches/worker_restart.rs"
+harness = false
+
+[[bench]]
+name = "behavior_sweep"
+path = "benches/behavior_sweep.rs"
+harness = false

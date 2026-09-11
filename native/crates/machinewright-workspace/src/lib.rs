@@ -1,11 +1,11 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashMap},
     fs::{self, File},
     io::Write,
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
     sync::mpsc::{self, Receiver},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use lapce_xi_rope::Rope;
@@ -30,18 +30,37 @@ const DEFAULT_IGNORES: &[&str] = &[
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectFileEvent {
     pub paths: Vec<PathBuf>,
+    /// Set when this event is (or completes) a detected rename/move, giving
+    /// the old and new paths in that order. `notify` reports a rename as
+    /// either a single event with both paths (typically macOS/FSEvents) or a
+    /// `From` event followed later by a `To` event linked by a tracker id
+    /// (typically Linux/inotify) — `ProjectWatcher` reassembles both forms.
+    pub rename: Option<(PathBuf, PathBuf)>,
 }
+
+/// How long a `From` half of a rename is held while waiting for its matching
+/// `To` event before being treated as an ordinary (non-rename) change.
+const RENAME_PAIR_TIMEOUT: Duration = Duration::from_secs(2);
 
 pub struct ProjectWatcher {
     _watcher: RecommendedWatcher,
     receiver: Receiver<Result<notify::Event, notify::Error>>,
+    pending_renames: HashMap<usize, (PathBuf, Instant)>,
 }
+
+/// How many undo/redo steps to persist per document. Each step holds a
+/// full-text snapshot, so this is capped well below `Document`'s in-memory
+/// 1000-entry limit to keep the preferences file (rewritten on every cursor
+/// move) a bounded size.
+const PERSISTED_HISTORY_DEPTH: usize = 20;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct WorkspacePreferences {
     pub tabs: Vec<PathBuf>,
     pub active: Option<PathBuf>,
     pub cursors: BTreeMap<PathBuf, Vec<Cursor>>,
+    #[serde(default)]
+    pub history: BTreeMap<PathBuf, DocumentHistory>,
     pub left_panel_width: f64,
     pub right_panel_width: f64,
 }
@@ -63,6 +82,21 @@ impl WorkspacePreferences {
                 .documents
                 .iter()
                 .map(|(path, document)| (path.clone(), document.cursors.clone()))
+                .collect(),
+            // Unsaved buffer content is never restored across restarts (only
+            // cursors and, now, history are), so persisting history for a
+            // dirty document would restore an undo stack whose "current"
+            // entry doesn't match the disk content `open_document` reads
+            // back. Restricting to clean documents keeps the restored stack
+            // consistent with the text it will actually reopen against.
+            history: workspace
+                .documents
+                .iter()
+                .filter(|(_, document)| !document.is_dirty())
+                .map(|(path, document)| {
+                    let (undo, redo) = document.history_snapshot(PERSISTED_HISTORY_DEPTH);
+                    (path.clone(), DocumentHistory { undo, redo })
+                })
                 .collect(),
             left_panel_width: 300.0,
             right_panel_width: 300.0,
@@ -86,6 +120,12 @@ impl WorkspacePreferences {
                         .document_mut(path)
                         .expect("restored tab is open")
                         .set_cursors(cursors.clone())?;
+                }
+                if let Some(history) = self.history.get(path) {
+                    workspace
+                        .document_mut(path)
+                        .expect("restored tab is open")
+                        .restore_history(history.undo.clone(), history.redo.clone());
                 }
             }
         }
@@ -111,20 +151,51 @@ impl ProjectWatcher {
         Ok(Self {
             _watcher: watcher,
             receiver,
+            pending_renames: HashMap::new(),
         })
     }
 
     pub fn recv_timeout(
-        &self,
+        &mut self,
         timeout: Duration,
     ) -> Result<Option<ProjectFileEvent>, WorkspaceError> {
+        self.pending_renames
+            .retain(|_, (_, seen)| seen.elapsed() < RENAME_PAIR_TIMEOUT);
         match self.receiver.recv_timeout(timeout) {
-            Ok(Ok(event)) => Ok(Some(ProjectFileEvent { paths: event.paths })),
+            Ok(Ok(event)) => Ok(Some(self.classify(event))),
             Ok(Err(error)) => Err(WorkspaceError::Watch(error.to_string())),
             Err(mpsc::RecvTimeoutError::Timeout) => Ok(None),
             Err(mpsc::RecvTimeoutError::Disconnected) => {
                 Err(WorkspaceError::Watch("file watcher stopped".into()))
             }
+        }
+    }
+
+    fn classify(&mut self, event: notify::Event) -> ProjectFileEvent {
+        use notify::event::{ModifyKind, RenameMode};
+        let rename = match event.kind {
+            notify::EventKind::Modify(ModifyKind::Name(RenameMode::Both))
+                if event.paths.len() == 2 =>
+            {
+                Some((event.paths[0].clone(), event.paths[1].clone()))
+            }
+            notify::EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
+                if let (Some(tracker), Some(path)) = (event.tracker(), event.paths.first()) {
+                    self.pending_renames
+                        .insert(tracker, (path.clone(), Instant::now()));
+                }
+                None
+            }
+            notify::EventKind::Modify(ModifyKind::Name(RenameMode::To)) => event
+                .tracker()
+                .and_then(|tracker| self.pending_renames.remove(&tracker))
+                .zip(event.paths.first().cloned())
+                .map(|((from, _), to)| (from, to)),
+            _ => None,
+        };
+        ProjectFileEvent {
+            paths: event.paths,
+            rename,
         }
     }
 }
@@ -293,6 +364,25 @@ fn trust_record(project_root: &Path) -> Result<TrustRecord, WorkspaceError> {
         manifest_digest: digest(&manifest_bytes),
         lock_digest: digest(&fs::read(canonical_root.join(manifest.environment_lock))?),
     })
+}
+
+/// A single serialized undo/redo step, for persisting a bounded slice of a
+/// document's history across app restarts. Full-text, mirroring the
+/// in-memory `DocumentVersion` representation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PersistedEdit {
+    pub text: String,
+    pub cursors: Vec<Cursor>,
+}
+
+/// A document's persisted undo/redo history, capped well below the
+/// in-memory limit since each step holds a full-text snapshot.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DocumentHistory {
+    #[serde(default)]
+    pub undo: Vec<PersistedEdit>,
+    #[serde(default)]
+    pub redo: Vec<PersistedEdit>,
 }
 
 #[derive(Debug, Clone)]
@@ -523,6 +613,38 @@ impl Document {
         true
     }
 
+    /// Returns the most recent `limit` undo and redo steps, oldest first,
+    /// for persistence in `WorkspacePreferences`.
+    pub fn history_snapshot(&self, limit: usize) -> (Vec<PersistedEdit>, Vec<PersistedEdit>) {
+        fn persist(versions: &[DocumentVersion], limit: usize) -> Vec<PersistedEdit> {
+            let start = versions.len().saturating_sub(limit);
+            versions[start..]
+                .iter()
+                .map(|version| PersistedEdit {
+                    text: version.text.to_string(),
+                    cursors: version.cursors.clone(),
+                })
+                .collect()
+        }
+        (persist(&self.undo, limit), persist(&self.redo, limit))
+    }
+
+    /// Restores undo/redo history captured by `history_snapshot`, replacing
+    /// any history accumulated since the document was opened.
+    pub fn restore_history(&mut self, undo: Vec<PersistedEdit>, redo: Vec<PersistedEdit>) {
+        fn to_versions(edits: Vec<PersistedEdit>) -> Vec<DocumentVersion> {
+            edits
+                .into_iter()
+                .map(|edit| DocumentVersion {
+                    text: Rope::from(edit.text),
+                    cursors: edit.cursors,
+                })
+                .collect()
+        }
+        self.undo = to_versions(undo);
+        self.redo = to_versions(redo);
+    }
+
     pub fn save(&mut self, force: bool) -> Result<(), WorkspaceError> {
         self.require_writable()?;
         let current = disk_fingerprint(&self.path)?;
@@ -736,6 +858,30 @@ impl ProjectWorkspace {
         self.active = Some(display_path.clone());
         &self.documents[&display_path]
     }
+    /// Reconciles a detected (or explicit) rename/move for an open document,
+    /// across *all* open tabs, not just the active one — remapping the
+    /// document's map key, its own recorded path, the tab list, and the
+    /// active-tab pointer if needed. Returns `false` (a no-op) if `from`
+    /// isn't an open document, which is the common case for most rename
+    /// events in the project tree.
+    pub fn rename_document(&mut self, from: &Path, to: &Path) -> bool {
+        let Some(mut document) = self.documents.remove(from) else {
+            return false;
+        };
+        let to = to.canonicalize().unwrap_or_else(|_| to.to_owned());
+        document.path = to.clone();
+        self.documents.insert(to.clone(), document);
+        for tab in &mut self.tabs {
+            if tab == from {
+                *tab = to.clone();
+            }
+        }
+        if self.active.as_deref() == Some(from) {
+            self.active = Some(to);
+        }
+        true
+    }
+
     pub fn close_document(&mut self, path: &Path) -> Result<(), WorkspaceError> {
         if self.documents.get(path).is_some_and(Document::is_dirty) {
             return Err(WorkspaceError::Unsaved(path.to_owned()));
@@ -827,6 +973,21 @@ pub fn read_all_project_files(root: &Path) -> Result<Vec<(PathBuf, Vec<u8>)>, Wo
             Ok((relative, bytes))
         })
         .collect()
+}
+
+/// True if `path` (which need not exist) sits under `root` outside every
+/// ignored directory (`.git`, `.venv`, `__pycache__`, build output, etc.) —
+/// the same filter `read_all_project_files`/`refresh_files` apply when
+/// listing project files, exposed so callers reacting to raw filesystem
+/// watch events (which are otherwise unfiltered) can apply the same
+/// relevance test without duplicating the ignore list.
+pub fn is_relevant_project_path(root: &Path, path: &Path) -> bool {
+    let Ok(relative) = path.strip_prefix(root) else {
+        return false;
+    };
+    !relative.components().any(|component| {
+        DEFAULT_IGNORES.contains(&component.as_os_str().to_string_lossy().as_ref())
+    })
 }
 
 fn collect_files(
@@ -971,7 +1132,10 @@ fn disk_fingerprint(path: &Path) -> Result<DiskFingerprint, WorkspaceError> {
     }
 }
 
-fn digest(bytes: &[u8]) -> String {
+/// The digest scheme `Document::content_digest`/`saved_digest` and every
+/// `SourceSpan::source_digest` produced by the evaluator use — exposed so
+/// callers can validate a source span against a file that isn't open.
+pub fn digest(bytes: &[u8]) -> String {
     format!("sha256:{:x}", Sha256::digest(bytes))
 }
 
@@ -1171,6 +1335,127 @@ mod tests {
             restored.document(&source).unwrap().cursors()[0],
             Cursor::caret(5)
         );
+    }
+    #[test]
+    fn preferences_restore_undo_and_redo_history_for_saved_documents() {
+        let root = tempfile::tempdir().unwrap();
+        fs::write(root.path().join("machinewright.toml"), "project_id='x'").unwrap();
+        let source = root.path().join("model.py");
+        fs::write(&source, "value = 1\n").unwrap();
+        let source = source.canonicalize().unwrap();
+        let mut workspace = ProjectWorkspace::open(root.path()).unwrap();
+        workspace.open_document(&source).unwrap();
+        workspace
+            .document_mut(&source)
+            .unwrap()
+            .replace("value = 2\n")
+            .unwrap();
+        workspace
+            .document_mut(&source)
+            .unwrap()
+            .replace("value = 3\n")
+            .unwrap();
+        workspace
+            .document_mut(&source)
+            .unwrap()
+            .save(false)
+            .unwrap();
+
+        let app_data = tempfile::tempdir().unwrap();
+        let preferences_path = app_data.path().join("preferences.json");
+        WorkspacePreferences::capture(&workspace)
+            .save(&preferences_path)
+            .unwrap();
+
+        let mut restored = ProjectWorkspace::open(root.path()).unwrap();
+        WorkspacePreferences::load(&preferences_path)
+            .unwrap()
+            .restore(&mut restored)
+            .unwrap();
+
+        assert_eq!(restored.document(&source).unwrap().text(), "value = 3\n");
+        assert!(restored.document_mut(&source).unwrap().undo());
+        assert_eq!(restored.document(&source).unwrap().text(), "value = 2\n");
+        assert!(restored.document_mut(&source).unwrap().undo());
+        assert_eq!(restored.document(&source).unwrap().text(), "value = 1\n");
+    }
+    #[test]
+    fn preferences_do_not_persist_history_for_unsaved_documents() {
+        let root = tempfile::tempdir().unwrap();
+        fs::write(root.path().join("machinewright.toml"), "project_id='x'").unwrap();
+        let source = root.path().join("model.py");
+        fs::write(&source, "value = 1\n").unwrap();
+        let source = source.canonicalize().unwrap();
+        let mut workspace = ProjectWorkspace::open(root.path()).unwrap();
+        workspace.open_document(&source).unwrap();
+        workspace
+            .document_mut(&source)
+            .unwrap()
+            .replace("value = 2\n")
+            .unwrap();
+        // Never saved: the document remains dirty, so its history is not
+        // persisted (it wouldn't be consistent with the disk content the
+        // next launch reopens).
+        let preferences = WorkspacePreferences::capture(&workspace);
+        assert!(!preferences.history.contains_key(&source));
+    }
+    #[test]
+    fn rename_document_reconciles_a_background_tab_not_just_the_active_one() {
+        let root = tempfile::tempdir().unwrap();
+        fs::write(root.path().join("machinewright.toml"), "project_id='x'").unwrap();
+        let first = root.path().join("first.py");
+        let second = root.path().join("second.py");
+        fs::write(&first, "value = 1\n").unwrap();
+        fs::write(&second, "value = 2\n").unwrap();
+        let mut workspace = ProjectWorkspace::open(root.path()).unwrap();
+        workspace.open_document(&first).unwrap();
+        let first = first.canonicalize().unwrap();
+        workspace.open_document(&second).unwrap();
+        let second = second.canonicalize().unwrap();
+        // `second` is active (opened last); rename the *background* tab.
+        assert_eq!(workspace.active(), Some(second.as_path()));
+
+        let renamed_first = root.path().join("renamed_first.py");
+        fs::rename(&first, &renamed_first).unwrap();
+        assert!(workspace.rename_document(&first, &renamed_first));
+
+        let renamed_first = renamed_first.canonicalize().unwrap();
+        assert!(workspace.document(&first).is_none());
+        assert!(workspace.document(&renamed_first).is_some());
+        assert_eq!(
+            workspace.document(&renamed_first).unwrap().path(),
+            renamed_first
+        );
+        assert_eq!(workspace.tabs(), &[renamed_first.clone(), second.clone()]);
+        // The background tab's rename must not steal focus from the tab
+        // that was actually active.
+        assert_eq!(workspace.active(), Some(second.as_path()));
+    }
+    #[test]
+    fn rename_document_updates_the_active_pointer_when_the_active_tab_moves() {
+        let root = tempfile::tempdir().unwrap();
+        fs::write(root.path().join("machinewright.toml"), "project_id='x'").unwrap();
+        let source = root.path().join("model.py");
+        fs::write(&source, "value = 1\n").unwrap();
+        let mut workspace = ProjectWorkspace::open(root.path()).unwrap();
+        workspace.open_document(&source).unwrap();
+        let source = source.canonicalize().unwrap();
+
+        let renamed = root.path().join("renamed.py");
+        fs::rename(&source, &renamed).unwrap();
+        assert!(workspace.rename_document(&source, &renamed));
+        let renamed = renamed.canonicalize().unwrap();
+        assert_eq!(workspace.active(), Some(renamed.as_path()));
+    }
+    #[test]
+    fn rename_document_is_a_no_op_for_a_path_that_is_not_open() {
+        let root = tempfile::tempdir().unwrap();
+        fs::write(root.path().join("machinewright.toml"), "project_id='x'").unwrap();
+        let mut workspace = ProjectWorkspace::open(root.path()).unwrap();
+        assert!(!workspace.rename_document(
+            &root.path().join("untracked.py"),
+            &root.path().join("also_untracked.py")
+        ));
     }
     #[test]
     fn project_tree_ignores_environment_and_build_outputs() {

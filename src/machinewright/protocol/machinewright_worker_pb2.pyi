@@ -1,13 +1,7 @@
-from typing import (
-    ClassVar as _ClassVar,
-    Iterable as _Iterable,
-    Mapping as _Mapping,
-    Optional as _Optional,
-    Union as _Union,
-)
-
-from google.protobuf import descriptor as _descriptor, message as _message
 from google.protobuf.internal import containers as _containers
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import message as _message
+from typing import ClassVar as _ClassVar, Iterable as _Iterable, Mapping as _Mapping, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
@@ -117,19 +111,29 @@ class PartialDiagnostics(_message.Message):
     diagnostics_json: bytes
     def __init__(self, session_id: _Optional[str] = ..., generation: _Optional[int] = ..., diagnostics_json: _Optional[bytes] = ...) -> None: ...
 
+class SourceDigest(_message.Message):
+    __slots__ = ("relative_path", "digest")
+    RELATIVE_PATH_FIELD_NUMBER: _ClassVar[int]
+    DIGEST_FIELD_NUMBER: _ClassVar[int]
+    relative_path: str
+    digest: str
+    def __init__(self, relative_path: _Optional[str] = ..., digest: _Optional[str] = ...) -> None: ...
+
 class EvaluationCompleted(_message.Message):
-    __slots__ = ("session_id", "generation", "snapshot_path", "graph_digest", "artifact_manifest_digest")
+    __slots__ = ("session_id", "generation", "snapshot_path", "graph_digest", "artifact_manifest_digest", "evaluated_sources")
     SESSION_ID_FIELD_NUMBER: _ClassVar[int]
     GENERATION_FIELD_NUMBER: _ClassVar[int]
     SNAPSHOT_PATH_FIELD_NUMBER: _ClassVar[int]
     GRAPH_DIGEST_FIELD_NUMBER: _ClassVar[int]
     ARTIFACT_MANIFEST_DIGEST_FIELD_NUMBER: _ClassVar[int]
+    EVALUATED_SOURCES_FIELD_NUMBER: _ClassVar[int]
     session_id: str
     generation: int
     snapshot_path: str
     graph_digest: str
     artifact_manifest_digest: str
-    def __init__(self, session_id: _Optional[str] = ..., generation: _Optional[int] = ..., snapshot_path: _Optional[str] = ..., graph_digest: _Optional[str] = ..., artifact_manifest_digest: _Optional[str] = ...) -> None: ...
+    evaluated_sources: _containers.RepeatedCompositeFieldContainer[SourceDigest]
+    def __init__(self, session_id: _Optional[str] = ..., generation: _Optional[int] = ..., snapshot_path: _Optional[str] = ..., graph_digest: _Optional[str] = ..., artifact_manifest_digest: _Optional[str] = ..., evaluated_sources: _Optional[_Iterable[_Union[SourceDigest, _Mapping]]] = ...) -> None: ...
 
 class EvaluationFailed(_message.Message):
     __slots__ = ("session_id", "generation", "code", "message", "traceback", "diagnostics_json")

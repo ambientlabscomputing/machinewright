@@ -8,7 +8,9 @@ use std::{
     time::Duration,
 };
 
-use machinewright_app::{EvaluationPort, EvaluationRequest, PortError, WorkerCapabilities};
+use machinewright_app::{
+    EvaluationOutcome, EvaluationPort, EvaluationRequest, PortError, WorkerCapabilities,
+};
 use machinewright_model::{ProjectSnapshot, SnapshotError};
 use machinewright_protocol::{
     FrameError, PROTOCOL_VERSION,
@@ -438,7 +440,7 @@ impl EvaluationPort for WorkerProcess {
             .map_err(|error| PortError::new(error.to_string()))
     }
 
-    fn evaluate(&mut self, request: &EvaluationRequest) -> Result<ProjectSnapshot, PortError> {
+    fn evaluate(&mut self, request: &EvaluationRequest) -> Result<EvaluationOutcome, PortError> {
         self.send(WorkerRequest {
             request: Some(worker_request::Request::Evaluate(EvaluateProject {
                 session_id: request.session_id.clone(),
@@ -464,15 +466,42 @@ impl EvaluationPort for WorkerProcess {
             let event = self
                 .next_event()
                 .map_err(|error| PortError::new(error.to_string()))?;
+            // A stray terminal event for a superseded/earlier request (the
+            // worker is a single long-lived stream shared across calls)
+            // must not be accepted as this call's result — keep waiting for
+            // the one that actually matches what was just sent.
+            let matches_request = |session_id: &str, generation: u64| {
+                session_id == request.session_id && generation == request.generation
+            };
             match event.event {
-                Some(worker_event::Event::Completed(completed)) => {
-                    return ProjectSnapshot::load(completed.snapshot_path.as_ref())
-                        .map_err(|error| PortError::new(error.to_string()));
+                Some(worker_event::Event::Completed(completed))
+                    if matches_request(&completed.session_id, completed.generation) =>
+                {
+                    let snapshot = ProjectSnapshot::load(completed.snapshot_path.as_ref())
+                        .map_err(|error| PortError::new(error.to_string()))?;
+                    let evaluated_source_digests = completed
+                        .evaluated_sources
+                        .into_iter()
+                        .map(|item| (item.relative_path, item.digest))
+                        .collect();
+                    return Ok(EvaluationOutcome {
+                        snapshot,
+                        evaluated_source_digests,
+                    });
                 }
-                Some(worker_event::Event::Failed(failed)) => {
-                    return Err(PortError::new(failed.message));
+                Some(worker_event::Event::Failed(failed))
+                    if matches_request(&failed.session_id, failed.generation) =>
+                {
+                    return Err(PortError::evaluation_failed(
+                        failed.code,
+                        failed.message,
+                        failed.traceback,
+                        failed.diagnostics_json,
+                    ));
                 }
-                Some(worker_event::Event::Cancelled(_)) => {
+                Some(worker_event::Event::Cancelled(cancelled))
+                    if matches_request(&cancelled.session_id, cancelled.generation) =>
+                {
                     return Err(PortError::new("evaluation cancelled"));
                 }
                 _ => {}

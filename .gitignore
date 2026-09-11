@@ -1,5 +1,6 @@
 **/__pycache__/
 uv.lock
+**/.DS_store
 
 # Rust (native/)
 **/target/

@@ -12,3 +12,5 @@ wgpu = "22"
 
 [dev-dependencies]
 pollster = "0.3"
+serde_json.workspace = true
+tempfile.workspace = true

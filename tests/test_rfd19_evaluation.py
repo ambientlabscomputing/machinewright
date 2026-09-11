@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 import struct
@@ -123,6 +124,19 @@ def test_protocol_fixture_round_trips_python_binding():
     assert request.SerializeToString() == fixture
 
 
+def _parse_worker_events(payload: bytes) -> list[protocol.WorkerEvent]:
+    events = []
+    offset = 0
+    while offset < len(payload):
+        size = struct.unpack("<I", payload[offset : offset + 4])[0]
+        offset += 4
+        event = protocol.WorkerEvent()
+        event.ParseFromString(payload[offset : offset + size])
+        events.append(event)
+        offset += size
+    return events
+
+
 def test_worker_evaluates_project_and_returns_immutable_snapshot(tmp_path: Path):
     evaluate = protocol.WorkerRequest(
         evaluate=protocol.EvaluateProject(
@@ -151,15 +165,85 @@ def test_worker_evaluates_project_and_returns_immutable_snapshot(tmp_path: Path)
         capture_output=True,
         check=True,
     )
-    events = []
-    offset = 0
-    while offset < len(process.stdout):
-        size = struct.unpack("<I", process.stdout[offset : offset + 4])[0]
-        offset += 4
-        event = protocol.WorkerEvent()
-        event.ParseFromString(process.stdout[offset : offset + size])
-        events.append(event)
-        offset += size
+    events = _parse_worker_events(process.stdout)
     completed = next(event.completed for event in events if event.HasField("completed"))
     assert completed.generation == 7
     assert Path(completed.snapshot_path).is_file()
+    # R11b: the worker reports digests of what it actually read so a caller
+    # that independently reads the project tree can detect a divergence.
+    evaluated = {item.relative_path: item.digest for item in completed.evaluated_sources}
+    assert "examples/reference_project.py" in evaluated
+    expected_digest = "sha256:" + hashlib.sha256(
+        (ROOT / "examples/reference_project.py").read_bytes()
+    ).hexdigest()
+    assert evaluated["examples/reference_project.py"] == expected_digest
+
+
+def test_worker_processes_two_sequential_evaluations_in_one_process(tmp_path: Path):
+    # Reproduces R1 from docs/m2-implementation-review-2026-09-10.md: a
+    # long-lived worker must be able to evaluate the same overlaid project
+    # more than once. Each evaluation with overlays materializes a fresh temp
+    # project root, so the worker must evict modules/sys.path entries from
+    # the *previous* root before importing declared templates again.
+    #
+    # Run against a real worker subprocess (like
+    # test_worker_evaluates_project_and_returns_immutable_snapshot) rather
+    # than an in-process Worker: a real worker starts with pristine
+    # sys.modules/sys.path, matching production, whereas this test file's
+    # other tests import the reference project directly in-process and would
+    # otherwise leave stale module state behind for an in-process Worker to
+    # trip over.
+    valid_source = (ROOT / "examples/reference_project.py").read_bytes()
+    broken_source = valid_source + b"\nthis is not valid python syntax(((\n"
+
+    def evaluate_request(generation: int, source: bytes) -> bytes:
+        return protocol.WorkerRequest(
+            evaluate=protocol.EvaluateProject(
+                session_id="test-session",
+                generation=generation,
+                project_root=str(ROOT),
+                template_id="machinewright.reference.simple",
+                template_version="1.0.0",
+                inputs_json=json.dumps(INPUTS).encode(),
+                output_directory=str(tmp_path / f"gen-{generation}"),
+                overlays=[
+                    protocol.SourceOverlay(
+                        relative_path="examples/reference_project.py",
+                        content=source,
+                    )
+                ],
+            )
+        ).SerializeToString()
+
+    def framed(payload: bytes) -> bytes:
+        return struct.pack("<I", len(payload)) + payload
+
+    # success (gen 1) -> broken overlay (gen 2) -> corrected overlay (gen 3):
+    # the crux of R1 is that the worker must keep working after being reused,
+    # regardless of whether the intervening evaluation succeeded or failed.
+    stdin = (
+        framed(evaluate_request(1, valid_source))
+        + framed(evaluate_request(2, broken_source))
+        + framed(evaluate_request(3, valid_source))
+        + framed(protocol.WorkerRequest(shutdown=protocol.Shutdown()).SerializeToString())
+    )
+    process = subprocess.run(
+        ["uv", "run", "machinewright-worker"],
+        input=stdin,
+        capture_output=True,
+        check=True,
+    )
+    events = _parse_worker_events(process.stdout)
+    completed = {
+        event.completed.generation: event.completed
+        for event in events
+        if event.HasField("completed")
+    }
+    failed = {
+        event.failed.generation: event.failed for event in events if event.HasField("failed")
+    }
+    assert set(completed) == {1, 3}, (process.stderr.decode(errors="replace"), failed)
+    assert set(failed) == {2}
+    assert Path(completed[1].snapshot_path).is_file()
+    assert Path(completed[3].snapshot_path).is_file()
+    assert completed[1].snapshot_path != completed[3].snapshot_path

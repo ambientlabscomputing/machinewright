@@ -20,3 +20,5 @@ machinewright-render = { path = "../../crates/machinewright-render" }
 machinewright-workspace = { path = "../../crates/machinewright-workspace" }
 pollster = "0.3"
 sha2.workspace = true
+serde_json.workspace = true
+im = "15.1.0"

@@ -77,6 +77,56 @@ pub struct GraphNode {
     pub extensions: BTreeMap<String, Value>,
 }
 
+/// A part instance's placement within its assembly: an off-the-shelf part
+/// (e.g. a dowel pin used twice) tessellates identically in its own local
+/// frame regardless of where it sits in the assembly — that's what lets
+/// identical instances content-address to the same cached mesh bytes — so
+/// this instance-level placement is carried separately, in the graph node's
+/// `transform` extension, rather than baked into the mesh.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct NodeTransform {
+    pub translation_mm: [f64; 3],
+    pub rotation_degrees_xyz: [f64; 3],
+}
+
+impl Default for NodeTransform {
+    fn default() -> Self {
+        Self {
+            translation_mm: [0.0; 3],
+            rotation_degrees_xyz: [0.0; 3],
+        }
+    }
+}
+
+impl GraphNode {
+    /// Reads this node's placement from its `transform` extension, falling
+    /// back to the identity transform if the extension is absent or
+    /// malformed. Component values are ordinarily encoded as decimal
+    /// strings (matching every other physical quantity in the graph JSON,
+    /// e.g. `envelope_mm`/`center_mm`), but a plain JSON number is accepted
+    /// too.
+    pub fn transform(&self) -> NodeTransform {
+        fn triplet(value: &Value, key: &str) -> Option<[f64; 3]> {
+            let array = value.get(key)?.as_array()?;
+            let mut out = [0.0; 3];
+            for (slot, entry) in out.iter_mut().zip(array) {
+                *slot = entry
+                    .as_str()
+                    .and_then(|text| text.parse().ok())
+                    .or_else(|| entry.as_f64())?;
+            }
+            Some(out)
+        }
+        let Some(transform) = self.extensions.get("transform") else {
+            return NodeTransform::default();
+        };
+        NodeTransform {
+            translation_mm: triplet(transform, "translation_mm").unwrap_or_default(),
+            rotation_degrees_xyz: triplet(transform, "rotation_degrees_xyz").unwrap_or_default(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContainmentEdge {
     pub edge_id: String,
@@ -191,26 +241,57 @@ impl ProjectSnapshot {
             .map_or(&[], |mapping| mapping.node_ids.as_slice())
     }
 
-    pub fn source_for_node(&self, node_id: &str) -> Option<&SourceSpan> {
+    /// The mapping is deterministically the narrowest one covering
+    /// `node_id`: a node-level mapping has exactly one node id, a
+    /// definition-level mapping has however many instances share that
+    /// definition, and the whole-template mapping has every node in the
+    /// graph — so the smallest `node_ids` set is always the most specific,
+    /// regardless of emission order.
+    pub fn source_mapping_for_node(&self, node_id: &str) -> Option<&SourceMapping> {
         self.evaluation
             .source_mappings
             .iter()
-            .find(|mapping| {
+            .filter(|mapping| {
                 mapping
                     .node_ids
                     .iter()
                     .any(|candidate| candidate == node_id)
             })
-            .map(|mapping| &mapping.span)
+            .min_by_key(|mapping| mapping.node_ids.len())
     }
 
+    pub fn source_for_node(&self, node_id: &str) -> Option<&SourceSpan> {
+        self.source_mapping_for_node(node_id).map(|mapping| &mapping.span)
+    }
+
+    /// Selecting one node highlights every graph node owned by the same
+    /// source mapping (e.g. two instances created by the same call site),
+    /// not just the node that was clicked — `graph_node_id` stays the
+    /// clicked node so navigation/labeling still target it specifically.
     pub fn selection_for_node(&self, node_id: &str) -> SelectionState {
-        let selected = self.graph.nodes.contains_key(node_id);
+        if !self.graph.nodes.contains_key(node_id) {
+            return SelectionState {
+                generation: self.evaluation.generation,
+                ..SelectionState::default()
+            };
+        }
+        let mapping = self.source_mapping_for_node(node_id);
+        let mut graph_node_ids: Vec<String> = mapping.map_or_else(Vec::new, |mapping| {
+            mapping
+                .node_ids
+                .iter()
+                .filter(|candidate| self.graph.nodes.contains_key(candidate.as_str()))
+                .cloned()
+                .collect()
+        });
+        if graph_node_ids.is_empty() {
+            graph_node_ids.push(node_id.to_owned());
+        }
         SelectionState {
             generation: self.evaluation.generation,
-            graph_node_ids: selected.then(|| node_id.to_owned()).into_iter().collect(),
-            graph_node_id: selected.then(|| node_id.to_owned()),
-            source_span: self.source_for_node(node_id).cloned(),
+            graph_node_ids,
+            graph_node_id: Some(node_id.to_owned()),
+            source_span: mapping.map(|mapping| mapping.span.clone()),
             ..SelectionState::default()
         }
     }
@@ -248,4 +329,129 @@ pub enum SnapshotError {
     Io(#[from] std::io::Error),
     #[error("snapshot JSON is invalid: {0}")]
     Json(#[from] serde_json::Error),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn node(extensions: BTreeMap<String, Value>) -> GraphNode {
+        GraphNode {
+            node_id: "n".into(),
+            instance_key: "n".into(),
+            kind: "part".into(),
+            definition_id: "test.part".into(),
+            material_name: None,
+            parameters: Value::Null,
+            extensions,
+        }
+    }
+
+    #[test]
+    fn source_for_node_prefers_the_narrowest_overlapping_mapping() {
+        // A whole-template mapping covers every node; a node-level mapping
+        // covers exactly one. The node-level mapping must win regardless of
+        // which order they appear in `source_mappings`.
+        let document = serde_json::json!({
+            "schema_version": "1.0",
+            "generation": 1,
+            "graph_digest": "sha256:graph",
+            "artifact_manifest_digest": "sha256:manifest",
+            "graph": {
+                "nodes": [
+                    {
+                        "node_id": "a", "instance_key": "a", "kind": "component",
+                        "definition_id": "test.part", "parameters": {}
+                    },
+                    {
+                        "node_id": "b", "instance_key": "b", "kind": "component",
+                        "definition_id": "test.part", "parameters": {}
+                    },
+                ],
+                "containment": [],
+            },
+            "source_mappings": [
+                {
+                    "source_id": "template:test@1.0.0",
+                    "node_ids": ["a", "b"],
+                    "span": {
+                        "path": "template.py", "source_digest": "sha256:template",
+                        "start_byte": 0, "end_byte": 100, "start_line": 1, "end_line": 10,
+                    },
+                },
+                {
+                    "source_id": "node:a",
+                    "node_ids": ["a"],
+                    "span": {
+                        "path": "node.py", "source_digest": "sha256:node",
+                        "start_byte": 5, "end_byte": 10, "start_line": 2, "end_line": 2,
+                    },
+                },
+            ],
+            "dependencies": [], "diagnostics": [],
+            "meshes": [], "observables": [], "evidence_requirements": [],
+            "control_configuration": {}, "provenance": {}
+        });
+        let path = std::env::temp_dir().join(format!(
+            "machinewright-model-test-{}-{:?}.json",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::write(&path, serde_json::to_vec(&document).unwrap()).unwrap();
+        let snapshot = ProjectSnapshot::load(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        let span = snapshot.source_for_node("a").expect("mapping exists");
+        assert_eq!(span.path, "node.py");
+    }
+
+    #[test]
+    fn transform_defaults_to_identity_when_absent() {
+        let node = node(BTreeMap::new());
+        assert_eq!(node.transform(), NodeTransform::default());
+    }
+
+    #[test]
+    fn transform_parses_decimal_string_components() {
+        let node = node(BTreeMap::from([(
+            "transform".into(),
+            serde_json::json!({
+                "translation_mm": ["1.5", "0", "-20"],
+                "rotation_degrees_xyz": ["0", "90", "0"],
+            }),
+        )]));
+        assert_eq!(
+            node.transform(),
+            NodeTransform {
+                translation_mm: [1.5, 0.0, -20.0],
+                rotation_degrees_xyz: [0.0, 90.0, 0.0],
+            }
+        );
+    }
+
+    #[test]
+    fn transform_accepts_plain_json_numbers_too() {
+        let node = node(BTreeMap::from([(
+            "transform".into(),
+            serde_json::json!({
+                "translation_mm": [1.5, 0, -20],
+                "rotation_degrees_xyz": [0, 90, 0],
+            }),
+        )]));
+        assert_eq!(
+            node.transform(),
+            NodeTransform {
+                translation_mm: [1.5, 0.0, -20.0],
+                rotation_degrees_xyz: [0.0, 90.0, 0.0],
+            }
+        );
+    }
+
+    #[test]
+    fn transform_falls_back_to_identity_on_malformed_data() {
+        let node = node(BTreeMap::from([(
+            "transform".into(),
+            serde_json::json!({"translation_mm": "not an array"}),
+        )]));
+        assert_eq!(node.transform(), NodeTransform::default());
+    }
 }
