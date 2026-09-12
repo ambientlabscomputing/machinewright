@@ -10,6 +10,7 @@ criterion = "0.5"
 pollster = "0.3"
 serde_json.workspace = true
 tempfile.workspace = true
+machinewright-analysis = { path = "../crates/machinewright-analysis" }
 machinewright-app = { path = "../crates/machinewright-app" }
 machinewright-evaluator = { path = "../crates/machinewright-evaluator" }
 machinewright-model = { path = "../crates/machinewright-model" }
@@ -39,4 +40,9 @@ harness = false
 [[bench]]
 name = "behavior_sweep"
 path = "benches/behavior_sweep.rs"
+harness = false
+
+[[bench]]
+name = "real_sweep"
+path = "benches/real_sweep.rs"
 harness = false

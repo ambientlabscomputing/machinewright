@@ -1,6 +1,6 @@
 use std::{
     cell::{Cell, RefCell},
-    collections::{BTreeMap, BTreeSet, HashSet},
+    collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
     rc::Rc,
     sync::{
@@ -12,25 +12,26 @@ use std::{
 
 use floem::ext_event::create_signal_from_channel;
 use floem::{
-    IntoView,
+    Application, IntoView,
     event::{Event, EventListener, EventPropagation},
     keyboard::{Key, Modifiers, NamedKey},
-    kurbo::Point,
-    launch,
-    peniko::Color,
+    kurbo::{Point, Size},
     pointer::PointerButton,
     prelude::*,
     quit_app,
     reactive::{RwSignal, SignalGet, SignalUpdate, create_effect},
+    style::Style,
     views::{
         VirtualDirection, VirtualItemSize, button, dyn_container, dyn_stack, empty, h_stack, img,
         label, scroll, text_editor, text_input, v_stack,
     },
+    window::WindowConfig,
 };
 use floem_editor_core::{cursor::CursorMode, editor::EditType, selection::Selection};
 use machinewright_app::{
-    AppCommand, AppEvent, EvaluationOutcome, EvaluationPort, EvaluationRequest, LanguagePort,
-    PortError, PortableProject, PresentationUpdate, ProjectSession, WorkerCapabilities,
+    AppCommand, AppEvent, EvaluationOutcome, EvaluationPort, EvaluationRequest, EvaluationRuntime,
+    LanguagePort, PortError, PortableProject, PresentationUpdate, ProjectSession, RuntimeCommand,
+    WorkerCapabilities,
 };
 use machinewright_cache::{CacheLease, SnapshotImport, SnapshotRecord, SnapshotStore};
 use machinewright_editor::PythonSyntax;
@@ -45,11 +46,25 @@ use machinewright_render::{
     AxisView, OffscreenRenderer, PickTarget, Scene, ViewportCommand, ViewportState,
     orbit_drag_command, pan_drag_command, wheel_zoom_command,
 };
+use machinewright_ui::command_palette::{CommandPaletteViewModel, PaletteCommand, PaletteCommandId};
+use machinewright_ui::graph::{GraphIntent, GraphRow, graph_rows, reduce_graph_intent};
+use machinewright_ui::workspace::{Dock, PanelId, WorkspaceLayout, WorkspaceIntent, reduce_workspace_intent};
 use machinewright_workspace::{
     Cursor as WorkspaceCursor, DiffKind, DiskChange, EnvironmentSpec, ProjectWatcher, TrustStore,
     WorkspacePreferences, is_relevant_project_path,
 };
 use sha2::{Digest, Sha256};
+
+mod button_style;
+mod command_palette_view;
+mod controls;
+mod sweep;
+mod theme;
+mod toolbar;
+
+use button_style::{ButtonVariant, ButtonVariantExt};
+use command_palette_view::{command_palette_overlay, open_palette};
+use toolbar::toolbar_divider;
 
 #[derive(Clone)]
 struct EvaluationResult {
@@ -61,7 +76,7 @@ struct EvaluationResult {
 }
 
 #[derive(Clone)]
-struct LatestEvaluationSender {
+pub(crate) struct LatestEvaluationSender {
     pending: Arc<Mutex<Option<EvaluationRequest>>>,
     wake: crossbeam_channel::Sender<()>,
 }
@@ -88,7 +103,7 @@ impl LatestEvaluationSender {
 /// supervisor can force-terminate a worker that ignores it past its grace
 /// period.
 #[derive(Clone)]
-struct SharedWorkerSender {
+pub(crate) struct SharedWorkerSender {
     inner: Arc<Mutex<Option<WorkerSender>>>,
     cancel_requested: Arc<Mutex<Option<(u64, Instant)>>>,
 }
@@ -165,7 +180,7 @@ type WorkerRuntime = (
     crossbeam_channel::Receiver<Vec<String>>,
     crossbeam_channel::Receiver<String>,
     crossbeam_channel::Sender<()>,
-    Arc<AtomicU64>,
+    Arc<Mutex<EvaluationRuntime>>,
 );
 
 type LanguageRuntime = (
@@ -174,22 +189,22 @@ type LanguageRuntime = (
 );
 
 #[derive(Clone)]
-struct ViewportRequest {
-    scene: Scene,
-    state: ViewportState,
-    width: u32,
-    height: u32,
+pub(crate) struct ViewportRequest {
+    pub(crate) scene: Scene,
+    pub(crate) state: ViewportState,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
 }
 
 #[derive(Clone)]
-struct LatestViewportSender {
+pub(crate) struct LatestViewportSender {
     pending: Arc<Mutex<Option<(u64, ViewportRequest)>>>,
     wake: crossbeam_channel::Sender<()>,
     revision: Arc<AtomicU64>,
 }
 
 impl LatestViewportSender {
-    fn try_send(&self, request: ViewportRequest) -> Result<(), ()> {
+    pub(crate) fn try_send(&self, request: ViewportRequest) -> Result<(), ()> {
         let revision = self.revision.fetch_add(1, Ordering::SeqCst) + 1;
         *self.pending.lock().map_err(|_| ())? = Some((revision, request));
         match self.wake.try_send(()) {
@@ -201,49 +216,6 @@ impl LatestViewportSender {
     fn revision(&self) -> u64 {
         self.revision.load(Ordering::SeqCst)
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct GraphRow {
-    node_id: String,
-    label: String,
-    depth: usize,
-}
-
-fn graph_rows(snapshot: &ProjectSnapshot) -> Vec<GraphRow> {
-    fn append(
-        snapshot: &ProjectSnapshot,
-        node_id: &str,
-        depth: usize,
-        rows: &mut Vec<GraphRow>,
-        visited: &mut HashSet<String>,
-    ) {
-        if !visited.insert(node_id.to_owned()) {
-            return;
-        }
-        let Some(node) = snapshot.graph().nodes.get(node_id) else {
-            return;
-        };
-        rows.push(GraphRow {
-            node_id: node_id.into(),
-            label: format!("{} · {}", node.instance_key, node.kind),
-            depth,
-        });
-        if let Some(children) = snapshot.graph().children.get(node_id) {
-            for child in children {
-                append(snapshot, child, depth + 1, rows, visited);
-            }
-        }
-    }
-    let mut rows = Vec::new();
-    let mut visited = HashSet::new();
-    for root in snapshot.graph().roots() {
-        append(snapshot, &root.node_id, 0, &mut rows, &mut visited);
-    }
-    for node_id in snapshot.graph().nodes.keys() {
-        append(snapshot, node_id, 0, &mut rows, &mut visited);
-    }
-    rows
 }
 
 #[derive(Clone)]
@@ -473,7 +445,7 @@ fn start_language(root: &Path) -> LanguageRuntime {
 /// Spawns a worker process, negotiates its protocol/capabilities, and
 /// validates its declared environment. Used both for the initial worker and
 /// for every respawn after a crash, so the same checks apply either way.
-fn spawn_worker(
+pub(crate) fn spawn_worker(
     environment: &EnvironmentSpec,
 ) -> Result<(WorkerProcess, WorkerCapabilities), String> {
     let mut worker =
@@ -537,7 +509,7 @@ fn source_provenance_mismatch(
     None
 }
 
-fn evaluate_supervised(
+pub(crate) fn evaluate_supervised(
     worker: &mut WorkerProcess,
     request: &EvaluationRequest,
     supervisor: &Arc<Mutex<WorkerSupervisor>>,
@@ -596,7 +568,7 @@ fn evaluate_supervised(
 /// every later respawn (crash recovery or explicit Retry), so a fix applied
 /// after startup (e.g. `uv sync`) or an environment change is picked up
 /// without restarting the application.
-fn resolve_and_spawn(
+pub(crate) fn resolve_and_spawn(
     project_root: &Path,
 ) -> Result<(WorkerProcess, WorkerCapabilities, bool), String> {
     let environment = EnvironmentSpec::resolve(project_root).map_err(|error| error.to_string())?;
@@ -647,12 +619,13 @@ fn start_worker(
             "Worker unavailable ({error}) — use Retry Worker to continue."
         ));
     }
-    // Tracks the most recently *requested* generation, set by `schedule_evaluation`
-    // as soon as a new evaluation is scheduled — not just the one currently
-    // running. The eval loop consults it before committing to the durable
-    // snapshot cache, so a superseded generation is never written as "last
-    // valid" ahead of being discarded by the UI.
-    let latest = Arc::new(AtomicU64::new(0));
+    // Tracks the most recently *requested* generation, updated by
+    // `schedule_evaluation` (via `EvaluationRuntime::content_changed`) as
+    // soon as a new evaluation is scheduled — not just the one currently
+    // running. The eval loop consults `accepts()` before committing to the
+    // durable snapshot cache, so a superseded generation is never written
+    // as "last valid" ahead of being discarded by the UI.
+    let runtime = Arc::new(Mutex::new(EvaluationRuntime::new()));
     let current_logs = Arc::new(Mutex::new(
         initial_worker
             .as_ref()
@@ -674,7 +647,7 @@ fn start_worker(
         });
     }
     let eval_sender = sender.clone();
-    let eval_latest = Arc::clone(&latest);
+    let eval_runtime = Arc::clone(&runtime);
     std::thread::spawn(move || {
         let supervisor = Arc::new(Mutex::new(WorkerSupervisor::new(ResourcePolicy::default())));
         let thread_started = Instant::now();
@@ -807,7 +780,11 @@ fn start_worker(
                 &worker_logs,
             )
             .and_then(|outcome| {
-                if generation != eval_latest.load(Ordering::SeqCst) {
+                let accepted = eval_runtime
+                    .lock()
+                    .map(|guard| guard.accepts(generation))
+                    .unwrap_or(false);
+                if !accepted {
                     return Err(PortError::new(format!(
                         "evaluation for generation {generation} superseded before it could be cached"
                     )));
@@ -922,24 +899,17 @@ fn start_worker(
         log_rx,
         health_rx,
         retry_tx,
-        latest,
+        runtime,
     )
 }
 
-fn schedule_evaluation(
+pub(crate) fn schedule_evaluation(
     session: &Rc<RefCell<ProjectSession>>,
-    latest: &Arc<AtomicU64>,
-    sent: &Arc<AtomicU64>,
+    runtime: &Arc<Mutex<EvaluationRuntime>>,
     sender: &SharedWorkerSender,
     requests: &LatestEvaluationSender,
 ) -> Result<u64, String> {
     let generation = session.borrow_mut().begin_evaluation();
-    latest.store(generation, Ordering::SeqCst);
-    let session_id = session.borrow().session_id.clone();
-    let running = sent.load(Ordering::SeqCst);
-    if running > 0 {
-        sender.send_cancel(session_id, running)?;
-    }
     let output = std::env::temp_dir()
         .join("machinewright-native")
         .join(std::process::id().to_string())
@@ -948,13 +918,26 @@ fn schedule_evaluation(
         .borrow()
         .evaluation_request(output)
         .map_err(|error| error.to_string())?;
+    let command = runtime
+        .lock()
+        .map_err(|_| "evaluation runtime lock poisoned".to_string())?
+        .content_changed(request);
+    if let RuntimeCommand::Cancel {
+        session_id,
+        generation: running,
+    } = command
+    {
+        sender.send_cancel(session_id, running)?;
+    }
     let requests = requests.clone();
-    let latest = Arc::clone(latest);
-    let sent = Arc::clone(sent);
+    let runtime = Arc::clone(runtime);
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(300));
-        if latest.load(Ordering::SeqCst) == generation {
-            sent.store(generation, Ordering::SeqCst);
+        let command = runtime
+            .lock()
+            .map(|mut guard| guard.debounce_elapsed(generation))
+            .unwrap_or(RuntimeCommand::None);
+        if let RuntimeCommand::Send(request) = command {
             let _ = requests.send(request);
         }
     });
@@ -984,8 +967,8 @@ fn matches_named(event: &floem::keyboard::KeyEvent, key: NamedKey, modifiers: Mo
 /// Reference resolution the viewport is always rendered/picked against
 /// (independent of the widget's actual on-screen size), matching the
 /// existing convention in the pick handler below.
-const VIEWPORT_WIDTH_PX: f64 = 800.0;
-const VIEWPORT_HEIGHT_PX: f64 = 600.0;
+pub(crate) const VIEWPORT_WIDTH_PX: f64 = 800.0;
+pub(crate) const VIEWPORT_HEIGHT_PX: f64 = 600.0;
 /// Total pointer movement (in pixels) below which a press-and-release on the
 /// viewport is still treated as a pick click rather than a camera drag.
 const CLICK_MOVEMENT_THRESHOLD: f64 = 4.0;
@@ -1075,14 +1058,15 @@ fn untrusted_app(
             },
             Err(error) => status.set(format!("Could not store trust: {error}")),
         }
-    });
+    })
+    .variant(ButtonVariant::Primary);
     v_stack((
         h_stack((
             label(move || format!("Machinewright · {} · Browse only", path.display())),
             trust,
             label(move || status.get()),
         ))
-        .style(|style| style.gap(12.0).padding(10.0).items_center()),
+        .style(|style| style.gap(theme::space::MD).padding(theme::space::MD).items_center()),
         text_editor(source)
             .disabled(|| true)
             .style(|style| style.width_full().height_full().flex_grow(1.0)),
@@ -1094,12 +1078,253 @@ fn startup_error_app(path: PathBuf, source: String, message: String) -> impl Int
     v_stack((
         label(move || format!("Machinewright · {}", path.display())),
         label(move || message.clone())
-            .style(|style| style.padding(12.0).background(Color::rgb8(255, 232, 232))),
+            .style(|style| style.padding(theme::space::MD).background(theme::infeasible_tint())),
         text_editor(source)
             .disabled(|| true)
             .style(|style| style.width_full().height_full().flex_grow(1.0)),
     ))
-    .style(|style| style.width_full().height_full().gap(8.0).padding(10.0))
+    .style(|style| style.width_full().height_full().gap(theme::space::SM).padding(theme::space::MD))
+}
+
+/// A dock zone's tab strip and collapse toggle — Zed/VS Code-style: a row
+/// of tab buttons switching which panel is active within this zone (via
+/// `WorkspaceIntent::ActivatePanel`), plus a button folding the whole zone
+/// away (`WorkspaceIntent::ToggleCollapsed`). Owns no content itself —
+/// see `dock_zone_shell`, which pairs this with the zone's (already-built)
+/// panel views.
+/// `PanelId`'s stable title doubles as its persisted key —
+/// `WorkspacePreferences` stores dock state as plain strings rather than
+/// depending on `machinewright-ui`'s type (see that field's doc comment),
+/// so this and `panel_id_from_key` are the two-way translation.
+fn panel_id_to_key(panel: PanelId) -> String {
+    panel.title().to_owned()
+}
+
+fn panel_id_from_key(key: &str) -> Option<PanelId> {
+    match key {
+        "Graph" => Some(PanelId::Graph),
+        "Diagnostics" => Some(PanelId::Diagnostics),
+        "Controls" => Some(PanelId::Controls),
+        "Sweep" => Some(PanelId::Sweep),
+        _ => None,
+    }
+}
+
+/// Reconstructs a `WorkspaceLayout` from persisted preferences, starting
+/// from the default panel assignment (which panels live in which zone
+/// isn't itself persisted — only collapsed/active state is) and applying
+/// whatever collapsed/active state was saved. An unrecognized or missing
+/// `*_active` key (a fresh preferences file, or one from before a panel
+/// existed) falls back to `default_for_machinewright`'s own choice.
+fn workspace_layout_from_preferences(preferences: &WorkspacePreferences) -> WorkspaceLayout {
+    let mut layout = WorkspaceLayout::default_for_machinewright();
+    layout.right.collapsed = preferences.right_dock_collapsed;
+    if let Some(panel) = preferences
+        .right_dock_active
+        .as_deref()
+        .and_then(panel_id_from_key)
+    {
+        layout.right.active = Some(panel);
+    }
+    layout.bottom.collapsed = preferences.bottom_dock_collapsed;
+    if let Some(panel) = preferences
+        .bottom_dock_active
+        .as_deref()
+        .and_then(panel_id_from_key)
+    {
+        layout.bottom.active = Some(panel);
+    }
+    layout
+}
+
+/// The inverse of `workspace_layout_from_preferences` — applied to a
+/// freshly-`capture`d `WorkspacePreferences` before it's sent for saving,
+/// since `capture` itself only knows about `ProjectWorkspace` state.
+fn apply_workspace_layout_to_preferences(preferences: &mut WorkspacePreferences, layout: &WorkspaceLayout) {
+    preferences.right_dock_collapsed = layout.right.collapsed;
+    preferences.right_dock_active = layout.right.active.map(panel_id_to_key);
+    preferences.bottom_dock_collapsed = layout.bottom.collapsed;
+    preferences.bottom_dock_active = layout.bottom.active.map(panel_id_to_key);
+}
+
+fn dock_header(workspace_layout: RwSignal<WorkspaceLayout>, dock: Dock) -> impl IntoView {
+    let tabs = dyn_stack(
+        move || workspace_layout.get().dock(dock).panels.clone(),
+        |panel: &PanelId| *panel,
+        move |panel: PanelId| {
+            button(panel.title())
+                .action(move || {
+                    workspace_layout.update(|layout| {
+                        *layout = reduce_workspace_intent(layout, WorkspaceIntent::ActivatePanel(panel));
+                    });
+                })
+                .style(move |style| {
+                    let active = workspace_layout.get().dock(dock).active == Some(panel);
+                    let style = button_style::apply_variant(style, ButtonVariant::Ghost);
+                    if active {
+                        style.apply(Style::new().background(theme::accent_tint()).color(theme::ink()))
+                    } else {
+                        style
+                    }
+                })
+        },
+    );
+    let collapse = button(label(move || {
+        if workspace_layout.get().dock(dock).collapsed {
+            "Expand"
+        } else {
+            "Collapse"
+        }
+    }))
+    .action(move || {
+        workspace_layout.update(|layout| {
+            *layout = reduce_workspace_intent(layout, WorkspaceIntent::ToggleCollapsed(dock));
+        });
+    })
+    .variant(ButtonVariant::Ghost);
+    h_stack((tabs, toolbar_divider(), collapse)).style(|style| {
+        style
+            .gap(theme::space::SM)
+            .items_center()
+            .padding(theme::space::XS)
+            .background(theme::surface())
+    })
+}
+
+/// Pairs a dock zone's header with its (already-built, always-mounted)
+/// panel content: `content` is a view containing every panel this zone can
+/// show, each individually wrapped by its builder to hide itself unless
+/// `WorkspaceLayout::is_visible` says otherwise (see the Graph/Diagnostics/
+/// Controls/Sweep construction in `app()`) — panels are built exactly
+/// once, not reconstructed on every tab switch, since some (Controls,
+/// Sweep) spawn background work on construction that must not repeat.
+/// `expanded_size` is the zone's fixed width (Right) or height (Bottom)
+/// when not collapsed; collapsing folds it to zero rather than hiding the
+/// header, so the tabs/expand button stay reachable.
+fn dock_zone_shell(
+    workspace_layout: RwSignal<WorkspaceLayout>,
+    dock: Dock,
+    content: impl IntoView + 'static,
+    expanded_size: f64,
+    vertical: bool,
+) -> impl IntoView {
+    let header = dock_header(workspace_layout, dock);
+    let body = scroll(content).style(move |style| {
+        let collapsed = workspace_layout.get().dock(dock).collapsed;
+        let size = if collapsed { 0.0 } else { expanded_size };
+        if vertical {
+            style.width_full().height(size)
+        } else {
+            style.width(size).height_full()
+        }
+    });
+    v_stack((header, body)).style(move |style| {
+        if vertical {
+            style.width_full()
+        } else {
+            style.height_full()
+        }
+    })
+}
+
+/// Opens `target` into the session and mirrors it into the editor/tab
+/// state: dispatches `AppCommand::OpenDocument`, then replaces the editor's
+/// content and restores the reopened document's cursor position, updates
+/// `active_path`/`open_tabs`, and refreshes `dirty`. Shared by the file
+/// tree's own click-to-open handler and the command palette's "open file"
+/// command, which must behave identically — this is the exact body that
+/// used to live only in the file tree's `on_select` closure.
+#[allow(clippy::too_many_arguments)]
+fn open_file_into_session(
+    target: &Path,
+    session: &Rc<RefCell<ProjectSession>>,
+    active_path: RwSignal<PathBuf>,
+    open_tabs: RwSignal<Vec<PathBuf>>,
+    document: &Rc<dyn floem::views::editor::text::Document>,
+    programmatic_edit: &Rc<Cell<bool>>,
+    editor_cursor: RwSignal<floem_editor_core::cursor::Cursor>,
+    dirty: RwSignal<bool>,
+    save_status: RwSignal<String>,
+) -> bool {
+    if let Err(error) = session
+        .borrow_mut()
+        .dispatch(AppCommand::OpenDocument(target.to_path_buf()))
+    {
+        save_status.set(error.to_string());
+        return false;
+    }
+    let canonical = target.canonicalize().unwrap_or_else(|_| target.to_path_buf());
+    let (source, cursors) = {
+        let session = session.borrow();
+        let opened = session
+            .workspace
+            .document(&canonical)
+            .expect("opened document exists");
+        (opened.text(), opened.cursors().to_vec())
+    };
+    active_path.set(canonical.clone());
+    open_tabs.set(session.borrow().workspace.tabs().to_vec());
+    programmatic_edit.set(true);
+    document.edit_single(Selection::region(0, document.text().len()), &source, EditType::Other);
+    let mut selection = Selection::new();
+    for cursor in cursors {
+        selection.add_region(floem_editor_core::selection::SelRegion::new(
+            cursor.anchor,
+            cursor.head,
+            None,
+        ));
+    }
+    editor_cursor.update(|cursor| cursor.mode = CursorMode::Insert(selection));
+    dirty.set(
+        session
+            .borrow()
+            .workspace
+            .document(&canonical)
+            .is_some_and(|document| document.is_dirty()),
+    );
+    true
+}
+
+/// Builds the command palette's v1 registry: "open project in a new
+/// window" (always present, discoverable even for users who don't know
+/// the `Cmd+O` shortcut) plus one "open file" entry per project file.
+/// Adapter-local, not part of `machinewright_ui::command_palette` — the
+/// module itself is generic over any registry; this is the app-specific
+/// data that fills it.
+fn build_palette_commands(project_files: &im::Vector<PathBuf>) -> Vec<PaletteCommand> {
+    let primary_key_label = if cfg!(target_os = "macos") { "Cmd" } else { "Ctrl" };
+    let mut commands = vec![PaletteCommand::new(
+        "open-project-new-window",
+        "Open Project in New Window…",
+    )
+    .with_subtitle(format!("{primary_key_label}+O"))];
+    for relative in project_files {
+        let title = relative
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_else(|| relative.to_string_lossy().into_owned());
+        let subtitle = relative
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .map(|parent| parent.to_string_lossy().into_owned());
+        let mut command = PaletteCommand::new(format!("open-file:{}", relative.display()), title);
+        if let Some(subtitle) = subtitle {
+            command = command.with_subtitle(subtitle);
+        }
+        commands.push(command);
+    }
+    commands
+}
+
+/// Restarts the app as an independent process rooted at `root`, exactly
+/// like the existing "Trust and Run" restart (`std::env::current_exe` +
+/// `Command::new(..).arg(..).spawn()`) — a second OS process is a complete,
+/// independent window, sidestepping floem's single-window-per-`Application`
+/// model entirely rather than trying to open a second window in-process.
+fn spawn_project_window(root: &Path) {
+    if let Ok(executable) = std::env::current_exe() {
+        let _ = std::process::Command::new(executable).arg(root).spawn();
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1122,8 +1347,18 @@ fn app(
         worker_logs,
         worker_health,
         worker_retry,
-        latest,
+        evaluation_runtime,
     ) = runtime;
+    // Which panel is visible in which dock zone — see
+    // `machinewright_ui::workspace` for why this state lives there rather
+    // than being adapter-local: it's the same shape a future non-Floem
+    // adapter would need. Seeded from the same preferences file document/
+    // cursor state was restored from in `main()` — a second, cheap load
+    // (missing-file tolerant) rather than threading the already-loaded
+    // value through as another `app()` parameter.
+    let workspace_layout = RwSignal::new(workspace_layout_from_preferences(
+        &WorkspacePreferences::load(&preferences_path).unwrap_or_default(),
+    ));
     let worker_health_status = RwSignal::new(String::new());
     let worker_health_signal = create_signal_from_channel(worker_health);
     create_effect(move |_| {
@@ -1140,7 +1375,8 @@ fn app(
     }))
     .action(move || {
         let _ = worker_retry.send(());
-    });
+    })
+    .variant(ButtonVariant::Icon);
     let (preferences_tx, preferences_rx) = crossbeam_channel::bounded::<WorkspacePreferences>(1);
     std::thread::spawn(move || {
         while let Ok(mut preferences) = preferences_rx.recv() {
@@ -1149,6 +1385,18 @@ fn app(
             }
             let _ = preferences.save(&preferences_path);
         }
+    });
+    // Toggling a dock's collapsed state or switching its active tab saves
+    // promptly, rather than waiting for the next cursor-movement-triggered
+    // capture below to happen to pick it up.
+    let layout_preferences_session = Rc::clone(&session);
+    let layout_preferences_tx = preferences_tx.clone();
+    create_effect(move |_| {
+        let layout = workspace_layout.get();
+        let mut preferences =
+            WorkspacePreferences::capture(&layout_preferences_session.borrow().workspace);
+        apply_workspace_layout_to_preferences(&mut preferences, &layout);
+        let _ = layout_preferences_tx.try_send(preferences);
     });
     let status = match &capabilities {
         Some(capabilities) => format!(
@@ -1171,6 +1419,11 @@ fn app(
     let open_tabs = RwSignal::new(session.borrow().workspace.tabs().to_vec());
     let project_files: RwSignal<im::Vector<PathBuf>> =
         RwSignal::new(session.borrow().workspace.files().iter().cloned().collect());
+    // Command palette (`Cmd+P`/`Cmd+O`): see `machinewright_ui::command_palette`
+    // for the pure filtering/selection state this drives, and
+    // `command_palette_view` for the floating overlay built from it.
+    let command_palette = RwSignal::new(CommandPaletteViewModel::default());
+    let command_palette_query = RwSignal::new(String::new());
     let save_status = RwSignal::new(String::new());
     let evaluation_status = RwSignal::new("Waiting for edits".to_string());
     let language_status = RwSignal::new("ty starting…".to_string());
@@ -1206,7 +1459,6 @@ fn app(
     let viewport_state = Rc::new(RefCell::new(ViewportState::default()));
     let current_cache_lease = Rc::new(RefCell::new(None::<Arc<CacheLease>>));
     let current_source_blobs = Rc::new(RefCell::new(BTreeMap::<String, PathBuf>::new()));
-    let sent = Arc::new(AtomicU64::new(0));
     let language_revision = Arc::new(AtomicU64::new(0));
     let worker_log_signal = create_signal_from_channel(worker_logs);
     create_effect(move |_| {
@@ -1359,18 +1611,24 @@ fn app(
 
     let result_signal = create_signal_from_channel(results);
     let result_snapshot = Rc::clone(&current_snapshot);
-    let result_latest = Arc::clone(&latest);
-    let result_sent = Arc::clone(&sent);
+    let result_runtime = Arc::clone(&evaluation_runtime);
     let result_session = Rc::clone(&session);
     let result_scene_load_requests = scene_load_requests.clone();
     create_effect(move |_| {
         let Some(event) = result_signal.get() else {
             return;
         };
-        if event.generation != result_latest.load(Ordering::SeqCst) {
+        let accepted = result_runtime
+            .lock()
+            .map(|mut guard| {
+                let accepted = guard.accepts(event.generation);
+                guard.mark_result_received(event.generation);
+                accepted
+            })
+            .unwrap_or(false);
+        if !accepted {
             return;
         }
-        result_sent.store(0, Ordering::SeqCst);
         match event.result {
             Ok(snapshot) => match result_session.borrow_mut().accept_snapshot(snapshot, false) {
                 Ok(Some(update)) => {
@@ -1462,7 +1720,9 @@ fn app(
                     .collect();
                 let _ = document.set_cursors(cursors);
             }
-            let _ = preferences_tx.try_send(WorkspacePreferences::capture(&session.workspace));
+            let mut preferences = WorkspacePreferences::capture(&session.workspace);
+            apply_workspace_layout_to_preferences(&mut preferences, &workspace_layout.get_untracked());
+            let _ = preferences_tx.try_send(preferences);
         }
         if cursor_session
             .borrow_mut()
@@ -1500,8 +1760,7 @@ fn app(
     let watcher_project_root = project.root.clone();
     let watcher_manifest_path = project.root.join("machinewright.toml");
     let watcher_environment_lock = project.environment_lock.clone();
-    let watcher_latest = Arc::clone(&latest);
-    let watcher_sent = Arc::clone(&sent);
+    let watcher_runtime = Arc::clone(&evaluation_runtime);
     let watcher_sender = worker_sender.clone();
     let watcher_requests = requests.clone();
     let (file_event_tx, file_event_rx) = crossbeam_channel::unbounded();
@@ -1557,11 +1816,16 @@ fn app(
             // terminal, another tool) would otherwise keep pointing at a
             // path that no longer exists until the user happened to select
             // it.
-            if watcher_session
+            // Bound first, not matched directly in the condition: a plain
+            // `if`'s condition temporaries can otherwise still be alive
+            // when the body re-borrows the same `RefCell`, mirroring the
+            // `match` gotcha explained by the `close` button handler
+            // above.
+            let renamed = watcher_session
                 .borrow_mut()
                 .workspace
-                .rename_document(from, to)
-            {
+                .rename_document(from, to);
+            if renamed {
                 open_tabs.set(watcher_session.borrow().workspace.tabs().to_vec());
                 if active_path.get() == *from {
                     active_path.set(to.clone());
@@ -1569,12 +1833,12 @@ fn app(
                 save_status.set(format!("Renamed {} → {}", from.display(), to.display()));
             }
         }
-        if watcher_session
+        let refreshed = watcher_session
             .borrow_mut()
             .workspace
             .refresh_files()
-            .unwrap_or(false)
-        {
+            .unwrap_or(false);
+        if refreshed {
             project_files.set(
                 watcher_session
                     .borrow()
@@ -1597,8 +1861,7 @@ fn app(
             evaluation_status.set("Waiting for evaluation…".into());
             if let Err(error) = schedule_evaluation(
                 &watcher_session,
-                &watcher_latest,
-                &watcher_sent,
+                &watcher_runtime,
                 &watcher_sender,
                 &watcher_requests,
             ) {
@@ -1636,8 +1899,7 @@ fn app(
                 evaluation_status.set("Waiting for evaluation…".into());
                 if let Err(error) = schedule_evaluation(
                     &watcher_session,
-                    &watcher_latest,
-                    &watcher_sent,
+                    &watcher_runtime,
                     &watcher_sender,
                     &watcher_requests,
                 ) {
@@ -1659,8 +1921,7 @@ fn app(
     let edit_document = Rc::clone(&document);
     let update_syntax = Rc::clone(&syntax);
     let edit_session = Rc::clone(&session);
-    let edit_latest = Arc::clone(&latest);
-    let edit_sent = Arc::clone(&sent);
+    let edit_runtime = Arc::clone(&evaluation_runtime);
     let edit_sender = worker_sender.clone();
     let edit_requests = requests.clone();
     let edit_language_requests = language_requests.clone();
@@ -1734,8 +1995,7 @@ fn app(
                 evaluation_status.set("Waiting for evaluation…".into());
                 if let Err(error) = schedule_evaluation(
                     &edit_session,
-                    &edit_latest,
-                    &edit_sent,
+                    &edit_runtime,
                     &edit_sender,
                     &edit_requests,
                 ) {
@@ -1761,18 +2021,21 @@ fn app(
             }
             Err(error) => save_status.set(error.to_string()),
         }
-    });
+    })
+    .variant(ButtonVariant::Secondary);
 
     let keep_session = Rc::clone(&session);
-    let keep_editor = button("Keep Editor Version").action(move || {
-        match keep_session
-            .borrow_mut()
-            .dispatch(AppCommand::AcknowledgeEditorVersion(active_path.get()))
-        {
-            Ok(_) => save_status.set("Editor version retained; use Force Save to overwrite the acknowledged disk revision".into()),
-            Err(error) => save_status.set(error.to_string()),
-        }
-    });
+    let keep_editor = button("Keep Editor Version")
+        .action(move || {
+            match keep_session
+                .borrow_mut()
+                .dispatch(AppCommand::AcknowledgeEditorVersion(active_path.get()))
+            {
+                Ok(_) => save_status.set("Editor version retained; use Force Save to overwrite the acknowledged disk revision".into()),
+                Err(error) => save_status.set(error.to_string()),
+            }
+        })
+        .variant(ButtonVariant::Secondary);
 
     let force_session = Rc::clone(&session);
     let force_save = button("Force Save").action(move || {
@@ -1788,11 +2051,11 @@ fn app(
             }
             Err(error) => save_status.set(error.to_string()),
         }
-    });
+    })
+    .variant(ButtonVariant::Secondary);
 
     let reload_session = Rc::clone(&session);
-    let reload_latest = Arc::clone(&latest);
-    let reload_sent = Arc::clone(&sent);
+    let reload_runtime = Arc::clone(&evaluation_runtime);
     let reload_sender = worker_sender.clone();
     let reload_requests = requests.clone();
     let reload = button("Reload from Disk").action(move || {
@@ -1823,8 +2086,7 @@ fn app(
                 evaluation_status.set("Waiting for evaluation…".into());
                 if let Err(error) = schedule_evaluation(
                     &reload_session,
-                    &reload_latest,
-                    &reload_sent,
+                    &reload_runtime,
                     &reload_sender,
                     &reload_requests,
                 ) {
@@ -1833,14 +2095,14 @@ fn app(
             }
             Err(error) => save_status.set(error.to_string()),
         }
-    });
+    })
+    .variant(ButtonVariant::Secondary);
 
     let history_control = |label_text: &'static str, command: fn(PathBuf) -> AppCommand| {
         let history_session = Rc::clone(&session);
         let history_document = Rc::clone(&document);
         let history_programmatic = Rc::clone(&programmatic_edit);
-        let history_latest = Arc::clone(&latest);
-        let history_sent = Arc::clone(&sent);
+        let history_runtime = Arc::clone(&evaluation_runtime);
         let history_sender = worker_sender.clone();
         let history_requests = requests.clone();
         button(label_text).action(move || {
@@ -1869,14 +2131,14 @@ fn app(
             evaluation_status.set("Waiting for evaluation…".into());
             if let Err(error) = schedule_evaluation(
                 &history_session,
-                &history_latest,
-                &history_sent,
+                &history_runtime,
                 &history_sender,
                 &history_requests,
             ) {
                 evaluation_status.set(error);
             }
         })
+        .variant(ButtonVariant::Secondary)
     };
     let undo = history_control("Undo", AppCommand::Undo);
     let redo = history_control("Redo", AppCommand::Redo);
@@ -1923,28 +2185,30 @@ fn app(
                 .map_err(|error| error.to_string());
             let _ = sender.try_send(result);
         });
-    });
+    })
+    .variant(ButtonVariant::Secondary);
 
     let evaluate_session = Rc::clone(&session);
-    let evaluate_latest = Arc::clone(&latest);
-    let evaluate_sent = Arc::clone(&sent);
+    let evaluate_runtime = Arc::clone(&evaluation_runtime);
     let evaluate_sender = worker_sender.clone();
     let evaluate_requests = requests.clone();
     let evaluate = button("Evaluate").action(move || {
         evaluation_status.set("Waiting for evaluation…".into());
         if let Err(error) = schedule_evaluation(
             &evaluate_session,
-            &evaluate_latest,
-            &evaluate_sent,
+            &evaluate_runtime,
             &evaluate_sender,
             &evaluate_requests,
         ) {
             evaluation_status.set(error);
         }
-    });
+    })
+    .variant(ButtonVariant::Primary);
 
     evaluation_status.set("Waiting for initial evaluation…".into());
-    if let Err(error) = schedule_evaluation(&session, &latest, &sent, &worker_sender, &requests) {
+    if let Err(error) =
+        schedule_evaluation(&session, &evaluation_runtime, &worker_sender, &requests)
+    {
         evaluation_status.set(error);
     }
     let initial_revision = session
@@ -1997,45 +2261,16 @@ fn app(
             return;
         };
         let target = file_root.join(&relative);
-        if let Err(error) = file_session
-            .borrow_mut()
-            .dispatch(AppCommand::OpenDocument(target.clone()))
-        {
-            save_status.set(error.to_string());
-            return;
-        }
-        let canonical = target.canonicalize().unwrap_or_else(|_| target.clone());
-        let (source, cursors) = {
-            let session = file_session.borrow();
-            let opened = session
-                .workspace
-                .document(&canonical)
-                .expect("opened document exists");
-            (opened.text(), opened.cursors().to_vec())
-        };
-        active_path.set(canonical);
-        open_tabs.set(file_session.borrow().workspace.tabs().to_vec());
-        file_programmatic.set(true);
-        file_document.edit_single(
-            Selection::region(0, file_document.text().len()),
-            &source,
-            EditType::Other,
-        );
-        let mut selection = Selection::new();
-        for cursor in cursors {
-            selection.add_region(floem_editor_core::selection::SelRegion::new(
-                cursor.anchor,
-                cursor.head,
-                None,
-            ));
-        }
-        editor_cursor.update(|cursor| cursor.mode = CursorMode::Insert(selection));
-        dirty.set(
-            file_session
-                .borrow()
-                .workspace
-                .document(&active_path.get())
-                .is_some_and(|document| document.is_dirty()),
+        open_file_into_session(
+            &target,
+            &file_session,
+            active_path,
+            open_tabs,
+            &file_document,
+            &file_programmatic,
+            editor_cursor,
+            dirty,
+            save_status,
         );
     });
     let workspace_tree = scroll(workspace_tree).style(|style| style.width_full().max_height(220.0));
@@ -2057,7 +2292,9 @@ fn app(
             let document = Rc::clone(&tab_document);
             let programmatic = Rc::clone(&tab_programmatic);
             let open_target = target.clone();
-            let open = button(label(move || label_text.clone())).action(move || {
+            let open = button(label(move || label_text.clone()))
+                .variant(ButtonVariant::Ghost)
+                .action(move || {
                 if session
                     .borrow_mut()
                     .dispatch(AppCommand::SetActiveDocument(open_target.clone()))
@@ -2107,11 +2344,18 @@ fn app(
             let close_document = Rc::clone(&tab_document);
             let close_programmatic = Rc::clone(&tab_programmatic);
             let close_language_requests = tab_language_requests.clone();
-            let close = button("×").action(move || {
-                match close_session
+            let close = button("×")
+                .variant(ButtonVariant::Destructive)
+                .action(move || {
+                // Bound to a variable first, not matched directly: a
+                // `match`'s scrutinee temporaries (here, the `RefMut` from
+                // `borrow_mut()`) live for the whole match, arms included,
+                // so re-borrowing `close_session` inside an arm would
+                // otherwise panic with "already mutably borrowed."
+                let result = close_session
                     .borrow_mut()
-                    .dispatch(AppCommand::CloseDocument(target.clone()))
-                {
+                    .dispatch(AppCommand::CloseDocument(target.clone()));
+                match result {
                     Ok(_) => {
                         let _ =
                             close_language_requests.send(LanguageRequest::Close(target.clone()));
@@ -2157,7 +2401,8 @@ fn app(
             "Shortcuts".to_string()
         }
     }))
-    .action(move || shortcuts_visible.update(|visible| *visible = !*visible));
+    .action(move || shortcuts_visible.update(|visible| *visible = !*visible))
+    .variant(ButtonVariant::Ghost);
     let shortcuts_panel = label(move || {
         if shortcuts_visible.get() {
             format!(
@@ -2175,7 +2420,7 @@ fn app(
             String::new()
         }
     })
-    .style(|style| style.padding(6.0));
+    .style(|style| style.padding(theme::space::SM));
 
     // Renames the active tab in place: a small text input bound to the
     // filename plus Confirm/Cancel, toggled by a "Rename" button. This is
@@ -2185,16 +2430,18 @@ fn app(
     let renaming = RwSignal::new(false);
     let rename_input_text = RwSignal::new(String::new());
     let rename_status = RwSignal::new(String::new());
-    let start_rename = button("Rename").action(move || {
-        let current = active_path.get();
-        let name = current
-            .file_name()
-            .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        rename_input_text.set(name);
-        rename_status.set(String::new());
-        renaming.set(true);
-    });
+    let start_rename = button("Rename")
+        .action(move || {
+            let current = active_path.get();
+            let name = current
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            rename_input_text.set(name);
+            rename_status.set(String::new());
+            renaming.set(true);
+        })
+        .variant(ButtonVariant::Ghost);
     let rename_session = Rc::clone(&session);
     let rename_row = dyn_container(
         move || renaming.get(),
@@ -2220,12 +2467,14 @@ fn app(
                     renaming.set(false);
                     return;
                 }
-                match confirm_session
-                    .borrow_mut()
-                    .dispatch(AppCommand::RenameDocument {
-                        from: from.clone(),
-                        to,
-                    }) {
+                // See the `close` handler above for why this can't be a
+                // direct `match x.borrow_mut()...` — the arms re-borrow
+                // `confirm_session`.
+                let result = confirm_session.borrow_mut().dispatch(AppCommand::RenameDocument {
+                    from: from.clone(),
+                    to,
+                });
+                match result {
                     Ok(events) => {
                         if let Some(AppEvent::DocumentRenamed { to, .. }) =
                             events.into_iter().next()
@@ -2238,15 +2487,18 @@ fn app(
                     }
                     Err(error) => rename_status.set(error.to_string()),
                 }
-            });
-            let cancel = button("Cancel").action(move || renaming.set(false));
+            })
+            .variant(ButtonVariant::Primary);
+            let cancel = button("Cancel")
+                .action(move || renaming.set(false))
+                .variant(ButtonVariant::Secondary);
             h_stack((
                 text_input(rename_input_text).style(|style| style.width(220.0)),
                 confirm,
                 cancel,
                 label(move || rename_status.get()),
             ))
-            .style(|style| style.gap(6.0).padding(6.0).items_center())
+            .style(|style| style.gap(theme::space::SM).padding(theme::space::SM).items_center())
             .into_any()
         },
     );
@@ -2267,12 +2519,12 @@ fn app(
             "Find/Replace".to_string()
         }
     }))
-    .action(move || find_replace_visible.update(|visible| *visible = !*visible));
+    .action(move || find_replace_visible.update(|visible| *visible = !*visible))
+    .variant(ButtonVariant::Ghost);
     let find_replace_session = Rc::clone(&session);
     let find_replace_document = Rc::clone(&document);
     let find_replace_programmatic = Rc::clone(&programmatic_edit);
-    let find_replace_latest = Arc::clone(&latest);
-    let find_replace_sent = Arc::clone(&sent);
+    let find_replace_runtime = Arc::clone(&evaluation_runtime);
     let find_replace_sender = worker_sender.clone();
     let find_replace_requests = requests.clone();
     let find_replace_row = dyn_container(
@@ -2284,8 +2536,7 @@ fn app(
             let replace_session = Rc::clone(&find_replace_session);
             let replace_document = Rc::clone(&find_replace_document);
             let replace_programmatic = Rc::clone(&find_replace_programmatic);
-            let replace_latest = Arc::clone(&find_replace_latest);
-            let replace_sent = Arc::clone(&find_replace_sent);
+            let replace_runtime = Arc::clone(&find_replace_runtime);
             let replace_sender = find_replace_sender.clone();
             let replace_requests = find_replace_requests.clone();
             let replace_all = button("Replace All").action(move || {
@@ -2295,11 +2546,16 @@ fn app(
                     find_status.set("Enter a search term".into());
                     return;
                 }
-                match replace_session.borrow_mut().dispatch(AppCommand::ReplaceAll {
+                // See the `close` handler above for why this can't be a
+                // direct `match x.borrow_mut()...` — the arms re-borrow
+                // `replace_session` (and `schedule_evaluation` below
+                // borrows it again internally).
+                let result = replace_session.borrow_mut().dispatch(AppCommand::ReplaceAll {
                     path: path.clone(),
                     query,
                     replacement: find_replacement.get(),
-                }) {
+                });
+                match result {
                     Ok(_) => {
                         let source = replace_session
                             .borrow()
@@ -2319,8 +2575,7 @@ fn app(
                         evaluation_status.set("Waiting for evaluation…".into());
                         if let Err(error) = schedule_evaluation(
                             &replace_session,
-                            &replace_latest,
-                            &replace_sent,
+                            &replace_runtime,
                             &replace_sender,
                             &replace_requests,
                         ) {
@@ -2329,14 +2584,15 @@ fn app(
                     }
                     Err(error) => find_status.set(error.to_string()),
                 }
-            });
+            })
+            .variant(ButtonVariant::Primary);
             h_stack((
                 text_input(find_query).style(|style| style.width(160.0)),
                 text_input(find_replacement).style(|style| style.width(160.0)),
                 replace_all,
                 label(move || find_status.get()),
             ))
-            .style(|style| style.gap(6.0).padding(6.0).items_center())
+            .style(|style| style.gap(theme::space::SM).padding(theme::space::SM).items_center())
             .into_any()
         },
     );
@@ -2351,7 +2607,8 @@ fn app(
             "Go to Line".to_string()
         }
     }))
-    .action(move || goto_visible.update(|visible| *visible = !*visible));
+    .action(move || goto_visible.update(|visible| *visible = !*visible))
+    .variant(ButtonVariant::Ghost);
     let goto_session = Rc::clone(&session);
     let goto_row = dyn_container(
         move || goto_visible.get(),
@@ -2366,10 +2623,14 @@ fn app(
                     goto_status.set("Enter a line number".into());
                     return;
                 };
-                match go_session.borrow_mut().dispatch(AppCommand::GoToLine {
+                // See the `close` handler above for why this can't be a
+                // direct `match x.borrow_mut()...` — the `Ok` arm
+                // re-borrows `go_session`.
+                let result = go_session.borrow_mut().dispatch(AppCommand::GoToLine {
                     path: path.clone(),
                     one_based_line: line,
-                }) {
+                });
+                match result {
                     Ok(_) => {
                         let byte = go_session
                             .borrow()
@@ -2386,35 +2647,40 @@ fn app(
                     }
                     Err(error) => goto_status.set(error.to_string()),
                 }
-            });
+            })
+            .variant(ButtonVariant::Primary);
             h_stack((
                 text_input(goto_line_text).style(|style| style.width(80.0)),
                 go,
                 label(move || goto_status.get()),
             ))
-            .style(|style| style.gap(6.0).padding(6.0).items_center())
+            .style(|style| style.gap(theme::space::SM).padding(theme::space::SM).items_center())
             .into_any()
         },
     );
 
+    // Grouped into clusters (Document / Run / Find) separated by hairline
+    // dividers rather than one undifferentiated row — the toolbar's own
+    // grid structure, and what makes `evaluate` (the header's one
+    // `Primary`-accented button) actually read as the primary action
+    // instead of being lost among a dozen equally-weighted siblings.
+    let document_group = h_stack((save, undo, redo, reload, compare, keep_editor, force_save))
+        .style(|style| style.gap(theme::space::SM).items_center());
+    let run_group =
+        h_stack((evaluate, retry_worker)).style(|style| style.gap(theme::space::SM).items_center());
+    let find_group = h_stack((shortcuts_toggle, start_rename, find_replace_toggle, goto_toggle))
+        .style(|style| style.gap(theme::space::SM).items_center());
     let header = h_stack((
         label(move || format!("Machinewright · {}", active_path.get().display())),
         label(move || if dirty.get() { " • Modified" } else { "" }),
-        save,
-        undo,
-        redo,
-        compare,
-        reload,
-        keep_editor,
-        force_save,
-        evaluate,
-        retry_worker,
-        shortcuts_toggle,
-        start_rename,
-        find_replace_toggle,
-        goto_toggle,
+        toolbar_divider(),
+        document_group,
+        toolbar_divider(),
+        run_group,
+        toolbar_divider(),
+        find_group,
     ))
-    .style(|style| style.gap(12.0).padding(10.0).items_center());
+    .style(|style| style.gap(theme::space::MD).padding(theme::space::MD).items_center());
     // On its own row, full-width, rather than at the end of the button
     // toolbar: with enough buttons the toolbar overflows a normal window
     // width, and this is the one piece of text that tells you whether the
@@ -2424,7 +2690,7 @@ fn app(
         label(move || save_status.get()),
         label(move || evaluation_status.get()),
     ))
-    .style(|style| style.padding_horiz(10.0).padding_bottom(6.0));
+    .style(|style| style.padding_horiz(theme::space::MD).padding_bottom(theme::space::SM));
 
     let graph_scene = Rc::clone(&current_scene);
     let graph_snapshot = Rc::clone(&current_snapshot);
@@ -2457,7 +2723,7 @@ fn app(
             label(move || label_text.clone()).style(move |style| {
                 let style = style.height(GRAPH_ROW_HEIGHT);
                 if selected_set.get().contains(&node_id) {
-                    style.background(Color::rgb8(255, 224, 178))
+                    style.background(theme::accent_tint())
                 } else {
                     style
                 }
@@ -2474,9 +2740,10 @@ fn app(
             return;
         };
         selected.set(Some(selected_id.clone()));
-        let _ = graph_session
-            .borrow_mut()
-            .dispatch(AppCommand::SelectNode(selected_id.clone()));
+        let command = reduce_graph_intent(GraphIntent::NodeClicked {
+            node_id: selected_id.clone(),
+        });
+        let _ = graph_session.borrow_mut().dispatch(command);
         let selection = graph_session.borrow().selection.clone();
         selected_set.set(selection.graph_node_ids.iter().cloned().collect());
         if selection.stale_source {
@@ -2579,7 +2846,8 @@ fn app(
             }
             Err(error) => source_location.set(format!("Cannot open evaluated revision: {error}")),
         }
-    });
+    })
+    .variant(ButtonVariant::Secondary);
 
     let workspace_panel = v_stack((label(|| "Workspace"), workspace_tree));
     let diff_panel = v_stack((
@@ -2591,13 +2859,33 @@ fn app(
         ))
         .style(|style| style.max_height(180.0).width_full()),
     ));
-    let sidebar = v_stack((
+    // The former single un-scrolled `sidebar` column, split into the
+    // Right dock's two tabs: Graph (file tree, graph view, selection
+    // inspector) and Diagnostics (evaluated-revision diff, language/
+    // syntax/evaluation diagnostics, worker status/log). Each panel is
+    // built once and stays mounted — only its visibility (driven by
+    // `workspace_layout`) changes when the user switches tabs or
+    // collapses the zone.
+    let graph_panel_workspace_layout = workspace_layout;
+    let graph_panel = v_stack((
         workspace_panel,
         label(|| "Graph"),
         graph,
         label(move || format!("Source: {}", source_location.get())),
         label(move || node_details.get()),
         label(move || measurement_status.get()),
+    ))
+    .style(move |style| {
+        let style = style.width_full().gap(theme::space::MD);
+        if graph_panel_workspace_layout.get().is_visible(PanelId::Graph) {
+            style
+        } else {
+            style.hide()
+        }
+    });
+
+    let diagnostics_panel_workspace_layout = workspace_layout;
+    let diagnostics_panel = v_stack((
         open_evaluated_revision,
         diff_panel,
         scroll(label(move || {
@@ -2638,14 +2926,27 @@ fn app(
             .style(|style| style.max_height(140.0).width_full()),
         )),
     ))
-    .style(|style| {
-        style
-            .width(300.0)
-            .height_full()
-            .gap(10.0)
-            .padding(12.0)
-            .background(Color::rgb8(238, 241, 246))
+    .style(move |style| {
+        let style = style.width_full().gap(theme::space::MD);
+        if diagnostics_panel_workspace_layout
+            .get()
+            .is_visible(PanelId::Diagnostics)
+        {
+            style
+        } else {
+            style.hide()
+        }
     });
+
+    let sidebar = dock_zone_shell(
+        workspace_layout,
+        Dock::Right,
+        v_stack((graph_panel, diagnostics_panel))
+            .style(|style| style.width_full().padding(theme::space::MD).gap(theme::space::MD)),
+        320.0,
+        false,
+    )
+    .style(|style| style.background(theme::surface()));
 
     let viewport_scene = Rc::clone(&current_scene);
     let viewport_snapshot = Rc::clone(&current_snapshot);
@@ -2659,17 +2960,19 @@ fn app(
         let state = Rc::clone(&viewport_state);
         let scene = Rc::clone(&current_scene);
         let requests = viewport_requests.clone();
-        button(text).action(move || {
-            let scene = scene.borrow();
-            let mut state = state.borrow_mut();
-            state.apply(command, &scene);
-            let _ = requests.try_send(ViewportRequest {
-                scene: scene.clone(),
-                state: state.clone(),
-                width: 800,
-                height: 600,
-            });
-        })
+        button(text)
+            .action(move || {
+                let scene = scene.borrow();
+                let mut state = state.borrow_mut();
+                state.apply(command, &scene);
+                let _ = requests.try_send(ViewportRequest {
+                    scene: scene.clone(),
+                    state: state.clone(),
+                    width: 800,
+                    height: 600,
+                });
+            })
+            .variant(ButtonVariant::Icon)
     };
     let fit = viewport_control("Fit", ViewportCommand::Fit);
     let orbit_left = viewport_control(
@@ -2686,8 +2989,33 @@ fn app(
     let top = viewport_control("Top", ViewportCommand::SetAxisView(AxisView::Top));
     let projection = viewport_control("Perspective / Ortho", ViewportCommand::ToggleProjection);
     let hide = viewport_control("Hide selected", ViewportCommand::ToggleHideSelected);
-    let isolate = viewport_control("Isolate", ViewportCommand::ToggleIsolateSelected);
-    let section = viewport_control("Section", ViewportCommand::ToggleSection);
+    // Isolate and Section are real persistent modes (unlike the one-shot
+    // camera commands `viewport_control` is mostly used for), so they get
+    // an explicit active-state indicator instead of relying on hover —
+    // this replaces what used to be an unexplained, easily-mistaken-for-a-
+    // hover-glitch grey box with a deliberate "this mode is currently on"
+    // signal, the same `accent_tint()` treatment the active dock tab uses.
+    // `viewport_frame` (updated on every rendered frame, which every
+    // viewport command triggers) is used purely as a reactivity trigger —
+    // `viewport_state` itself is a plain `RefCell`, not a signal.
+    let isolate_toggle_state = Rc::clone(&viewport_state);
+    let isolate = viewport_control("Isolate", ViewportCommand::ToggleIsolateSelected).style(move |style| {
+        viewport_frame.get();
+        if isolate_toggle_state.borrow().isolated.is_some() {
+            style.background(theme::accent_tint()).color(theme::ink())
+        } else {
+            style
+        }
+    });
+    let section_toggle_state = Rc::clone(&viewport_state);
+    let section = viewport_control("Section", ViewportCommand::ToggleSection).style(move |style| {
+        viewport_frame.get();
+        if section_toggle_state.borrow().section_plane.is_some() {
+            style.background(theme::accent_tint()).color(theme::ink())
+        } else {
+            style
+        }
+    });
     let measure_toggle_state = Rc::clone(&viewport_state);
     let measure_toggle_scene = Rc::clone(&current_scene);
     let measure_toggle_requests = viewport_requests.clone();
@@ -2706,6 +3034,16 @@ fn app(
             width: 800,
             height: 600,
         });
+    })
+    .variant(ButtonVariant::Ghost);
+    let measure_toggle_active_state = Rc::clone(&viewport_state);
+    let measure_toggle = measure_toggle.style(move |style| {
+        measurement_status.get();
+        if measure_toggle_active_state.borrow().measuring {
+            style.background(theme::accent_tint()).color(theme::ink())
+        } else {
+            style
+        }
     });
     let cancel_measure_state = Rc::clone(&viewport_state);
     let cancel_measure_scene = Rc::clone(&current_scene);
@@ -2723,7 +3061,8 @@ fn app(
             width: 800,
             height: 600,
         });
-    });
+    })
+    .variant(ButtonVariant::Destructive);
     let viewport = img(Vec::new);
     let viewport_id = viewport.id();
     create_effect(move |_| {
@@ -2939,16 +3278,84 @@ fn app(
         })
         .style(|style| style.width_full().height_full().flex_grow(1.0));
 
+    // Same grouped-cluster grid as the header toolbar: camera vs. view-axis
+    // vs. visibility vs. measurement read as distinct segments instead of
+    // 13 equally-weighted buttons in two undifferentiated rows.
+    let camera_group =
+        h_stack((fit, orbit_left, zoom_in, zoom_out)).style(|style| style.gap(theme::space::XS));
+    let view_group =
+        h_stack((front, right, top, projection)).style(|style| style.gap(theme::space::XS));
+    let selection_group =
+        h_stack((hide, isolate, section)).style(|style| style.gap(theme::space::XS));
+    let measurement_group = h_stack((measure_toggle, cancel_measurement))
+        .style(|style| style.gap(theme::space::XS));
     let viewport_panel = v_stack((
-        h_stack((
-            fit, orbit_left, zoom_in, zoom_out, front, right, top, projection,
-        ))
-        .style(|style| style.gap(6.0)),
-        h_stack((hide, isolate, section, measure_toggle, cancel_measurement))
-            .style(|style| style.gap(6.0)),
+        h_stack((camera_group, toolbar_divider(), view_group))
+            .style(|style| style.gap(theme::space::XS).items_center()),
+        h_stack((selection_group, toolbar_divider(), measurement_group))
+            .style(|style| style.gap(theme::space::XS).items_center()),
         viewport,
     ))
     .style(|style| style.width_full().height_full().flex_grow(1.0));
+
+    // Behavior Lab: typed-input controls and the cancellable-sweep panel
+    // (RFD-19 M3). Both dispatch through the same `ProjectSession`/
+    // `EvaluationRuntime` seam ordinary source edits use; the sweep panel
+    // additionally reuses the live viewport to display a clicked point's
+    // geometry, via `AppCommand::InspectSnapshot` (never touching the live
+    // session's own snapshot/selection).
+    let behavior_lab_worker_executable = EnvironmentSpec::resolve(&project.root)
+        .map(|spec| spec.worker_executable)
+        .unwrap_or_else(|_| project.root.join(".venv/bin/machinewright-worker"));
+    let controls_panel_workspace_layout = workspace_layout;
+    let controls_panel = controls::controls_panel(
+        Rc::clone(&session),
+        Arc::clone(&evaluation_runtime),
+        worker_sender.clone(),
+        requests.clone(),
+        evaluation_status,
+        behavior_lab_worker_executable,
+    )
+    .style(move |style| {
+        let style = style.width_full();
+        if controls_panel_workspace_layout
+            .get()
+            .is_visible(PanelId::Controls)
+        {
+            style
+        } else {
+            style.hide()
+        }
+    });
+    let sweep_panel_workspace_layout = workspace_layout;
+    let sweep_panel = sweep::sweep_panel(
+        Rc::clone(&session),
+        evaluation_status,
+        Rc::clone(&viewport_state),
+        Rc::clone(&current_scene),
+        viewport_requests.clone(),
+    )
+    .style(move |style| {
+        let style = style.width_full();
+        if sweep_panel_workspace_layout.get().is_visible(PanelId::Sweep) {
+            style
+        } else {
+            style.hide()
+        }
+    });
+    // Controls and Sweep are tabs of one Bottom dock zone (like the
+    // graph/diagnostics split above) rather than a fixed side-by-side row
+    // — only one is visible at a time, so the zone needs roughly half the
+    // width a side-by-side layout would, and it's independently
+    // collapsible/scrollable like every other dock zone instead of a
+    // one-off fixed-height row.
+    let behavior_lab = dock_zone_shell(
+        workspace_layout,
+        Dock::Bottom,
+        v_stack((controls_panel, sweep_panel)).style(|style| style.width_full()),
+        360.0,
+        true,
+    );
 
     // Keyboard shortcuts mirroring the Save/Undo/Redo/Evaluate buttons above,
     // attached to the root view so they work regardless of which child has
@@ -2960,26 +3367,74 @@ fn app(
     let key_history_document = Rc::clone(&document);
     let key_history_programmatic = Rc::clone(&programmatic_edit);
     let key_evaluate_session = Rc::clone(&session);
-    let key_evaluate_latest = Arc::clone(&latest);
-    let key_evaluate_sent = Arc::clone(&sent);
+    let key_evaluate_runtime = Arc::clone(&evaluation_runtime);
     let key_evaluate_sender = worker_sender.clone();
     let key_evaluate_requests = requests.clone();
     let key_viewport_state = Rc::clone(&viewport_state);
     let key_viewport_scene = Rc::clone(&current_scene);
     let key_viewport_requests = viewport_requests.clone();
+    let key_palette_project_files = project_files;
 
-    v_stack((
+    // Resolves a confirmed palette command into real work: an
+    // `open-file:<relative path>` id reuses the exact same
+    // `open_file_into_session` the file tree itself calls (no duplicated
+    // open-document logic); `open-project-new-window` prompts a native
+    // folder picker and spawns a fully independent second process rooted
+    // there, mirroring the existing Trust-and-Run restart idiom.
+    let palette_open_root = project.root.clone();
+    let palette_open_session = Rc::clone(&session);
+    let palette_open_document = Rc::clone(&document);
+    let palette_open_programmatic = Rc::clone(&programmatic_edit);
+    let on_palette_confirm = move |id: PaletteCommandId| {
+        if id.0 == "open-project-new-window" {
+            if let Some(chosen) = rfd::FileDialog::new().pick_folder() {
+                spawn_project_window(&chosen);
+            }
+            return;
+        }
+        if let Some(relative) = id.0.strip_prefix("open-file:") {
+            let target = palette_open_root.join(relative);
+            open_file_into_session(
+                &target,
+                &palette_open_session,
+                active_path,
+                open_tabs,
+                &palette_open_document,
+                &palette_open_programmatic,
+                editor_cursor,
+                dirty,
+                save_status,
+            );
+        }
+    };
+    let palette_overlay = command_palette_overlay(command_palette, command_palette_query, on_palette_confirm);
+
+    // Wraps the whole app in a scroll region as a defense-in-depth safety
+    // net on top of `launch_sized`'s explicit window size: even if a user
+    // resizes the OS window smaller than the content needs, everything
+    // stays reachable by scrolling instead of silently clipped below the
+    // window bounds (the bug that prompted this — see RFD-19 M3's
+    // workspace-layout design notes).
+    let root = scroll(
+        v_stack((
         header,
         status_row,
         shortcuts_panel,
         v_stack((rename_row, find_replace_row, goto_row)),
         tab_strip,
         h_stack((
-            editor.style(|style| style.width_pct(48.0)),
-            viewport_panel.style(|style| style.width_pct(32.0)),
-            sidebar.style(|style| style.width_pct(20.0)),
+            h_stack((
+                editor.style(|style| style.width_pct(60.0)),
+                viewport_panel.style(|style| style.width_pct(40.0)),
+            ))
+            .style(|style| style.flex_grow(1.0).height_full()),
+            // Fixed width (set inside `dock_zone_shell`), not a percentage
+            // of the row like `editor`/`viewport_panel` — a dock zone's
+            // size is independent of how much space the center area gets.
+            sidebar,
         ))
         .style(|style| style.flex_grow(1.0).width_full()),
+        behavior_lab,
     ))
     .style(|style| style.width_full().height_full())
     .keyboard_navigable()
@@ -2987,6 +3442,19 @@ fn app(
         let Event::KeyDown(key_event) = event else {
             return EventPropagation::Continue;
         };
+        // Checked first, ahead of every other shortcut, so the palette can
+        // be summoned regardless of which panel currently has focus.
+        if matches_chord(key_event, "p", PRIMARY_MODIFIER) {
+            let commands = build_palette_commands(&key_palette_project_files.get());
+            open_palette(command_palette, command_palette_query, commands);
+            return EventPropagation::Stop;
+        }
+        if matches_chord(key_event, "o", PRIMARY_MODIFIER) {
+            if let Some(chosen) = rfd::FileDialog::new().pick_folder() {
+                spawn_project_window(&chosen);
+            }
+            return EventPropagation::Stop;
+        }
         if matches_chord(key_event, "s", PRIMARY_MODIFIER) {
             match key_save_session
                 .borrow_mut()
@@ -3029,8 +3497,7 @@ fn app(
                 evaluation_status.set("Waiting for evaluation…".into());
                 if let Err(error) = schedule_evaluation(
                     &key_evaluate_session,
-                    &key_evaluate_latest,
-                    &key_evaluate_sent,
+                    &key_evaluate_runtime,
                     &key_evaluate_sender,
                     &key_evaluate_requests,
                 ) {
@@ -3043,8 +3510,7 @@ fn app(
             evaluation_status.set("Waiting for evaluation…".into());
             if let Err(error) = schedule_evaluation(
                 &key_evaluate_session,
-                &key_evaluate_latest,
-                &key_evaluate_sent,
+                &key_evaluate_runtime,
                 &key_evaluate_sender,
                 &key_evaluate_requests,
             ) {
@@ -3172,7 +3638,47 @@ fn app(
     .on_event(EventListener::PointerUp, move |_| {
         root_drag_state.set(ViewportDragState::default());
         EventPropagation::Continue
-    })
+    }),
+    )
+    .style(|style| style.width_full().height_full());
+
+    // The palette floats over everything else via absolute positioning
+    // (`command_palette_overlay`'s own styling) — wrapping it alongside the
+    // existing root is purely additive: the previous root keeps 100% of
+    // its own styling/handlers, and taffy resolves the overlay's `inset`
+    // against this container's content box regardless of the root's own
+    // (default, static) position. Deliberately `v_stack`, not the bare
+    // `stack()` a first pass used here: `stack()`'s direction is `None`,
+    // which taffy/flexbox defaults to `Row` — that put `root` (the only
+    // normal-flow child) into a row-direction flex container instead of
+    // the column layout its own internal structure assumes, and was the
+    // root cause of the bottom dock going missing again after this overlay
+    // was added. `palette_overlay` is `.absolute()`-positioned regardless
+    // of direction, so `v_stack` doesn't change anything about it.
+    v_stack((root, palette_overlay)).style(|style| style.width_full().height_full())
+}
+
+/// Opens a window at an explicit size, always resizable. Every `launch`
+/// site in this file used to go through floem's bare `launch()` helper,
+/// which passes `WindowConfig::default()` — no size hint at all, so the OS
+/// picks whatever default it likes and anything added to the bottom of the
+/// root view (like the dock zones below) can end up entirely below the
+/// visible window with no way to reach it. `resizable` is already floem's
+/// default; what was missing was ever asking for a size worth resizing
+/// from.
+fn launch_sized<V: IntoView + 'static>(
+    width: f64,
+    height: f64,
+    title: &str,
+    app_view: impl FnOnce() -> V + 'static,
+) {
+    let config = WindowConfig::default()
+        .size(Size::new(width, height))
+        .resizable(true)
+        .title(title);
+    Application::new()
+        .window(move |_| app_view(), Some(config))
+        .run();
 }
 
 fn main() {
@@ -3188,7 +3694,9 @@ fn main() {
                 "Could not open a Machinewright project at {}: {error}. The path must be inside a project containing machinewright.toml.",
                 path.display()
             );
-            launch(move || startup_error_app(path, String::new(), message));
+            launch_sized(640.0, 400.0, "Machinewright", move || {
+                startup_error_app(path, String::new(), message)
+            });
             return;
         }
     };
@@ -3196,7 +3704,9 @@ fn main() {
         Ok(source) => source,
         Err(error) => {
             let message = format!("Failed to read {}: {error}.", path.display());
-            launch(move || startup_error_app(path, String::new(), message));
+            launch_sized(640.0, 400.0, "Machinewright", move || {
+                startup_error_app(path, String::new(), message)
+            });
             return;
         }
     };
@@ -3209,7 +3719,9 @@ fn main() {
         .unwrap_or(false);
     if !trusted {
         let project_root = project.root.clone();
-        launch(move || untrusted_app(path, source, project_root, trust_path));
+        launch_sized(640.0, 400.0, "Machinewright", move || {
+            untrusted_app(path, source, project_root, trust_path)
+        });
         return;
     }
     let mut session = match ProjectSession::open(&project.root) {
@@ -3219,7 +3731,9 @@ fn main() {
                 "Failed to open the project workspace at {}: {error}.",
                 project.root.display()
             );
-            launch(move || startup_error_app(path, source, message));
+            launch_sized(640.0, 400.0, "Machinewright", move || {
+                startup_error_app(path, source, message)
+            });
             return;
         }
     };
@@ -3237,7 +3751,9 @@ fn main() {
             "Failed to open {} in the workspace: {error}.",
             path.display()
         );
-        launch(move || startup_error_app(path, source, message));
+        launch_sized(640.0, 400.0, "Machinewright", move || {
+            startup_error_app(path, source, message)
+        });
         return;
     }
     let session = Rc::new(RefCell::new(session));
@@ -3278,7 +3794,7 @@ fn main() {
         .join(format!("{project_key}-worker.log"));
     let runtime = start_worker(project.root.clone(), project_key, store, log_path);
     let language_runtime = start_language(&project.root);
-    launch(move || {
+    launch_sized(1440.0, 960.0, "Machinewright", move || {
         app(
             path,
             project,

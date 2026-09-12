@@ -9,6 +9,7 @@ members = [
     "crates/machinewright-workspace",
     "crates/machinewright-render",
     "crates/machinewright-app",
+    "crates/machinewright-ui",
     "crates/machinewright-language",
     "crates/machinewright-editor",
     "adapters/floem",

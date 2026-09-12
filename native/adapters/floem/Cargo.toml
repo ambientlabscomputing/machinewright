@@ -9,6 +9,7 @@ crossbeam-channel = "0.5"
 floem = "0.2.0"
 floem-editor-core = "0.2.0"
 dirs = "6"
+machinewright-analysis = { path = "../../crates/machinewright-analysis" }
 machinewright-app = { path = "../../crates/machinewright-app" }
 machinewright-cache = { path = "../../crates/machinewright-cache" }
 machinewright-evaluator = { path = "../../crates/machinewright-evaluator" }
@@ -17,8 +18,10 @@ machinewright-language = { path = "../../crates/machinewright-language" }
 machinewright-model = { path = "../../crates/machinewright-model" }
 machinewright-protocol = { path = "../../crates/machinewright-protocol" }
 machinewright-render = { path = "../../crates/machinewright-render" }
+machinewright-ui = { path = "../../crates/machinewright-ui" }
 machinewright-workspace = { path = "../../crates/machinewright-workspace" }
 pollster = "0.3"
 sha2.workspace = true
 serde_json.workspace = true
 im = "15.1.0"
+rfd = "0.17.2"

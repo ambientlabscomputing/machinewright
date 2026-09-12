@@ -63,6 +63,20 @@ pub struct WorkspacePreferences {
     pub history: BTreeMap<PathBuf, DocumentHistory>,
     pub left_panel_width: f64,
     pub right_panel_width: f64,
+    /// Dock-zone collapsed/active-tab state (RFD-19 M3's workspace-layout
+    /// model, `machinewright_ui::workspace::WorkspaceLayout`). Stored as
+    /// plain strings (a panel's stable title, e.g. "Graph") rather than
+    /// that crate's `PanelId` type, so this crate doesn't need to depend
+    /// on `machinewright-ui` just to persist a preference — the adapter
+    /// translates both ways.
+    #[serde(default)]
+    pub right_dock_collapsed: bool,
+    #[serde(default)]
+    pub right_dock_active: Option<String>,
+    #[serde(default)]
+    pub bottom_dock_collapsed: bool,
+    #[serde(default)]
+    pub bottom_dock_active: Option<String>,
 }
 
 impl WorkspacePreferences {
@@ -100,6 +114,11 @@ impl WorkspacePreferences {
                 .collect(),
             left_panel_width: 300.0,
             right_panel_width: 300.0,
+            // Not this crate's concern (see the field docs) — the caller
+            // overwrites these from its own dock-layout state after
+            // `capture` returns, same as it always did for the panel
+            // widths above.
+            ..Self::default()
         }
     }
 

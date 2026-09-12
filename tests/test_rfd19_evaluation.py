@@ -4,14 +4,19 @@ from pathlib import Path
 import struct
 import subprocess
 
+from typer.testing import CliRunner
+
 from machinewright import EvaluationCache, ExportFormat, ExportRequest, evaluate_project
+from machinewright.main import app as cli_app
 from machinewright.protocol import machinewright_worker_pb2 as protocol
 
 ROOT = Path(__file__).parents[1]
 INPUTS = json.loads((ROOT / "examples/inputs/reference.json").read_text())
+INPUTS_PATH = ROOT / "examples/inputs/reference.json"
 REQUEST = ExportRequest(
     formats=(ExportFormat.HARDWARE_GRAPH_JSON, ExportFormat.MANIFEST_JSON)
 )
+cli_runner = CliRunner()
 
 
 def test_direct_evaluation_is_portable_and_maps_source(tmp_path: Path):
@@ -247,3 +252,59 @@ def test_worker_processes_two_sequential_evaluations_in_one_process(tmp_path: Pa
     assert Path(completed[1].snapshot_path).is_file()
     assert Path(completed[3].snapshot_path).is_file()
     assert completed[1].snapshot_path != completed[3].snapshot_path
+
+
+def test_project_sweep_cli_produces_one_feasibility_flip_and_loadable_per_point_snapshots(
+    tmp_path: Path,
+):
+    """`machinewright project sweep` is the reference semantics M3's native
+    app mirrors for building sweep points (see
+    `machinewright_analysis::Sweep::from_axis` in the Rust workspace) and,
+    unlike the app, is already runnable headlessly for CI/reproducibility
+    (RFD-19 hard requirement #10) — this had zero test coverage before M3."""
+    output = tmp_path / "sweep"
+    result = cli_runner.invoke(
+        cli_app,
+        [
+            "project",
+            "sweep",
+            "machinewright.reference.simple",
+            "1.0.0",
+            str(INPUTS_PATH),
+            "requirements.payload_kg",
+            "3",
+            "63",
+            "21",
+            str(output),
+            "--root",
+            str(ROOT),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    summary = json.loads((output / "sweep.json").read_text())
+    assert summary["parameter"] == "requirements.payload_kg"
+    points = summary["points"]
+    assert len(points) == 21
+    assert all(point["status"] == "succeeded" for point in points), points
+
+    feasibility = [
+        next(
+            observable["feasible"]
+            for observable in point["observables"]
+            if observable["observable_id"] == "payload_margin"
+        )
+        for point in points
+    ]
+    # payload_margin = 50.0 - payload_kg is feasible up to payload_kg=50;
+    # sweeping 3-63 in steps of 3 crosses that boundary exactly once
+    # (feasible through payload_kg=48, infeasible from payload_kg=51). The
+    # range starts above 0, not at it, since ReferenceInputs.payload_kg is
+    # constrained to `gt=0`.
+    flips = sum(1 for before, after in zip(feasibility, feasibility[1:]) if before != after)
+    assert flips == 1, feasibility
+
+    for point in points:
+        snapshot_path = output / point["snapshot"]
+        assert snapshot_path.is_file()
+        snapshot = json.loads(snapshot_path.read_text())
+        assert snapshot["generation"] == point["index"] + 1

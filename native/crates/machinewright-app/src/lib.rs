@@ -127,9 +127,13 @@ impl PortableProject {
         generation: u64,
         workspace: &ProjectWorkspace,
         output_directory: PathBuf,
+        input_override: Option<&[u8]>,
     ) -> Result<EvaluationRequest, PortError> {
-        let inputs_json =
-            std::fs::read(&self.input_path).map_err(|error| PortError::new(error.to_string()))?;
+        let inputs_json = match input_override {
+            Some(bytes) => bytes.to_vec(),
+            None => std::fs::read(&self.input_path)
+                .map_err(|error| PortError::new(error.to_string()))?,
+        };
         let environment_digest = format!(
             "sha256:{:x}",
             Sha256::digest(
@@ -269,6 +273,19 @@ pub enum AppCommand {
         from: PathBuf,
         to: PathBuf,
     },
+    /// Substitutes `bytes` (a full, canonically-serialized inputs document)
+    /// for the on-disk input file in every subsequent `evaluation_request`,
+    /// until cleared. Does not touch disk — a Behavior Lab control changing
+    /// a slider does not rewrite the project's input file.
+    SetInputOverride(Vec<u8>),
+    /// Reverts to reading the on-disk input file.
+    ClearInputOverride,
+    /// Starts (or switches) browsing `snapshot` without touching the live
+    /// `snapshot`/`selection` — e.g. clicking a sweep point.
+    InspectSnapshot(ProjectSnapshot),
+    /// Stops browsing an inspected snapshot; the live snapshot/selection
+    /// are unaffected since they were never touched.
+    ReturnToLive,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -282,6 +299,8 @@ pub enum AppEvent {
     SelectionChanged,
     SnapshotInstalled(u64),
     DocumentRenamed { from: PathBuf, to: PathBuf },
+    InputOverrideChanged,
+    InspectionChanged,
 }
 
 #[derive(Debug)]
@@ -295,6 +314,18 @@ pub struct ProjectSession {
     pub diagnostics: Vec<EditorDiagnostic>,
     pub generation: u64,
     pub view_revision: u64,
+    /// A control-driven substitute for the on-disk input file, set by
+    /// `AppCommand::SetInputOverride` (e.g. a Behavior Lab slider) and
+    /// consumed by `evaluation_request` in place of rereading
+    /// `PortableProject::input_path` from disk. Cleared by
+    /// `AppCommand::ClearInputOverride` to revert to the file.
+    pub input_override: Option<Vec<u8>>,
+    /// A snapshot being browsed (e.g. a clicked sweep point), distinct from
+    /// `snapshot` (the live authored result). Set by
+    /// `AppCommand::InspectSnapshot`, cleared by `AppCommand::ReturnToLive`.
+    /// Never touches `snapshot`/`selection`, so browsing sweep points can
+    /// never clobber the live editing session.
+    pub inspected: Option<ProjectSnapshot>,
 }
 
 impl ProjectSession {
@@ -312,6 +343,8 @@ impl ProjectSession {
             diagnostics: Vec::new(),
             generation: 0,
             view_revision: 0,
+            input_override: None,
+            inspected: None,
         })
     }
 
@@ -327,6 +360,7 @@ impl ProjectSession {
             self.generation,
             &self.workspace,
             output,
+            self.input_override.as_deref(),
         )
     }
 
@@ -559,6 +593,22 @@ impl ProjectSession {
                     .map_err(|error| PortError::new(error.to_string()))?;
                 self.workspace.rename_document(&from, &to);
                 AppEvent::DocumentRenamed { from, to }
+            }
+            AppCommand::SetInputOverride(bytes) => {
+                self.input_override = Some(bytes);
+                AppEvent::InputOverrideChanged
+            }
+            AppCommand::ClearInputOverride => {
+                self.input_override = None;
+                AppEvent::InputOverrideChanged
+            }
+            AppCommand::InspectSnapshot(snapshot) => {
+                self.inspected = Some(snapshot);
+                AppEvent::InspectionChanged
+            }
+            AppCommand::ReturnToLive => {
+                self.inspected = None;
+                AppEvent::InspectionChanged
             }
         };
         Ok(vec![event])
@@ -1033,5 +1083,70 @@ mod tests {
             session.selection.graph_node_id.as_deref(),
             Some("root/part")
         );
+    }
+
+    #[test]
+    fn set_input_override_changes_the_request_without_touching_the_input_file_on_disk() {
+        let (_root, first, _) = project();
+        let mut session = ProjectSession::open(&first).unwrap();
+        let on_disk_before = std::fs::read(&session.project.input_path).unwrap();
+
+        session
+            .dispatch(AppCommand::SetInputOverride(b"{\"payload_kg\": 42}".to_vec()))
+            .unwrap();
+        let request = session.evaluation_request(PathBuf::from("/out")).unwrap();
+        assert_eq!(request.inputs_json, b"{\"payload_kg\": 42}");
+        assert_eq!(std::fs::read(&session.project.input_path).unwrap(), on_disk_before);
+    }
+
+    #[test]
+    fn clear_input_override_reverts_to_reading_the_input_file() {
+        let (_root, first, _) = project();
+        let mut session = ProjectSession::open(&first).unwrap();
+        let on_disk = std::fs::read(&session.project.input_path).unwrap();
+
+        session
+            .dispatch(AppCommand::SetInputOverride(b"{\"overridden\": true}".to_vec()))
+            .unwrap();
+        session.dispatch(AppCommand::ClearInputOverride).unwrap();
+        let request = session.evaluation_request(PathBuf::from("/out")).unwrap();
+        assert_eq!(request.inputs_json, on_disk);
+    }
+
+    #[test]
+    fn inspect_snapshot_leaves_the_live_snapshot_and_selection_untouched() {
+        let (root, first, _) = project();
+        let mut session = ProjectSession::open(&first).unwrap();
+        session.begin_evaluation();
+        session
+            .dispatch(AppCommand::InstallSnapshot(snapshot(
+                root.path(),
+                1,
+                &["root/part"],
+            )))
+            .unwrap();
+        session
+            .dispatch(AppCommand::SelectNode("root/part".into()))
+            .unwrap();
+        let live_selection = session.selection.clone();
+
+        session
+            .dispatch(AppCommand::InspectSnapshot(snapshot(
+                root.path(),
+                7,
+                &["root/other"],
+            )))
+            .unwrap();
+        assert_eq!(
+            session.inspected.as_ref().unwrap().evaluation().generation,
+            7
+        );
+        assert_eq!(session.snapshot.as_ref().unwrap().evaluation().generation, 1);
+        assert_eq!(session.selection, live_selection);
+
+        session.dispatch(AppCommand::ReturnToLive).unwrap();
+        assert!(session.inspected.is_none());
+        assert_eq!(session.snapshot.as_ref().unwrap().evaluation().generation, 1);
+        assert_eq!(session.selection, live_selection);
     }
 }

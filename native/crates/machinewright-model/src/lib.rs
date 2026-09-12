@@ -63,6 +63,53 @@ pub struct EvaluationSnapshot {
     pub provenance: Value,
 }
 
+/// Mirrors Python's `ObservableKind` (`src/machinewright/templates.py`)
+/// exactly — envelope/constraint/candidate display needs to branch
+/// exhaustively on which kind an observable is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ObservableKind {
+    Scalar,
+    Series,
+    Interval,
+    ConstraintMargin,
+    Candidate,
+    Extension,
+}
+
+/// Mirrors Python's `Observable` (`src/machinewright/templates.py`)
+/// exactly. `value` stays a raw `Value` — its shape depends on `kind`
+/// (a scalar number, a series of samples, an interval bound, ...) and
+/// isn't itself part of what M3's envelope/constraint/candidate display
+/// needs to branch on.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Observable {
+    pub observable_id: String,
+    pub kind: ObservableKind,
+    pub label: String,
+    pub value: Value,
+    #[serde(default)]
+    pub unit: Option<String>,
+    #[serde(default)]
+    pub feasible: Option<bool>,
+    #[serde(default)]
+    pub source_ids: Vec<String>,
+    #[serde(default)]
+    pub extension_schema: Option<String>,
+}
+
+impl EvaluationSnapshot {
+    /// Parses `observables` (kept as raw JSON on the wire, matching every
+    /// other worker-supplied payload field) into the typed form.
+    pub fn typed_observables(&self) -> Result<Vec<Observable>, serde_json::Error> {
+        self.observables
+            .iter()
+            .cloned()
+            .map(serde_json::from_value)
+            .collect()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GraphNode {
     pub node_id: String,
@@ -227,6 +274,10 @@ impl ProjectSnapshot {
 
     pub fn evaluation(&self) -> &EvaluationSnapshot {
         &self.evaluation
+    }
+
+    pub fn typed_observables(&self) -> Result<Vec<Observable>, serde_json::Error> {
+        self.evaluation.typed_observables()
     }
 
     pub fn graph(&self) -> &GraphIndex {
@@ -453,5 +504,37 @@ mod tests {
             serde_json::json!({"translation_mm": "not an array"}),
         )]));
         assert_eq!(node.transform(), NodeTransform::default());
+    }
+
+    #[test]
+    fn typed_observables_round_trips_a_constraint_margin_observable() {
+        // Matches the reference project's actual output shape
+        // (`examples/reference_project.py`'s `payload_margin` observable).
+        let snapshot: EvaluationSnapshot = serde_json::from_value(serde_json::json!({
+            "schema_version": "1.0",
+            "generation": 1,
+            "graph_digest": "sha256:graph",
+            "artifact_manifest_digest": "sha256:manifest",
+            "graph": {"nodes": [], "containment": []},
+            "observables": [
+                {
+                    "observable_id": "payload_margin",
+                    "kind": "constraint_margin",
+                    "label": "Payload margin",
+                    "value": 12.0,
+                    "unit": "kg",
+                    "feasible": true,
+                    "source_ids": ["template:machinewright.reference.simple@1.0.0"],
+                }
+            ],
+            "provenance": {},
+        }))
+        .unwrap();
+        let observables = snapshot.typed_observables().unwrap();
+        assert_eq!(observables.len(), 1);
+        assert_eq!(observables[0].observable_id, "payload_margin");
+        assert_eq!(observables[0].kind, ObservableKind::ConstraintMargin);
+        assert_eq!(observables[0].feasible, Some(true));
+        assert_eq!(observables[0].unit.as_deref(), Some("kg"));
     }
 }

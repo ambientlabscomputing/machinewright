@@ -117,6 +117,17 @@ impl EvaluationRuntime {
     pub fn accepts(&self, generation: u64) -> bool {
         generation == self.latest_generation
     }
+
+    /// A result (success or failure) arrived for `generation`. If it's
+    /// still the latest-requested generation, clears `sent_generation` so
+    /// a later edit's `content_changed` doesn't send a stale `Cancel` for a
+    /// generation that has already finished — a no-op for a stale result
+    /// that `accepts` would already reject.
+    pub fn mark_result_received(&mut self, generation: u64) {
+        if self.accepts(generation) {
+            self.sent_generation = None;
+        }
+    }
 }
 
 #[cfg(test)]
@@ -198,6 +209,37 @@ mod tests {
         let mut runtime = EvaluationRuntime::new();
         runtime.mark_recovery_required();
         assert_eq!(runtime.retry(), RuntimeCommand::None);
+    }
+
+    #[test]
+    fn mark_result_received_clears_sent_so_a_later_edit_does_not_cancel_a_finished_generation() {
+        let mut runtime = EvaluationRuntime::new();
+        runtime.content_changed(request(1));
+        runtime.debounce_elapsed(1);
+        runtime.mark_result_received(1);
+        // Generation 1 already finished, so a later edit must not try to
+        // cancel it — there is nothing in flight to cancel.
+        assert_eq!(runtime.content_changed(request(2)), RuntimeCommand::None);
+    }
+
+    #[test]
+    fn mark_result_received_ignores_a_stale_generation() {
+        let mut runtime = EvaluationRuntime::new();
+        runtime.content_changed(request(1));
+        runtime.debounce_elapsed(1);
+        // Generation 2 supersedes 1 before 1's result arrives.
+        runtime.content_changed(request(2));
+        runtime.debounce_elapsed(2);
+        // A stale result for generation 1 must not clear generation 2's
+        // sent-tracking.
+        runtime.mark_result_received(1);
+        assert_eq!(
+            runtime.content_changed(request(3)),
+            RuntimeCommand::Cancel {
+                session_id: "session".into(),
+                generation: 2,
+            }
+        );
     }
 
     #[test]

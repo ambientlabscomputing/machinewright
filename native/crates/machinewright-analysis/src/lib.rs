@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -27,6 +28,48 @@ pub struct Sweep {
     cancelled: bool,
 }
 
+/// A dotted `parameter_path` (e.g. `"requirements.payload_kg"`) does not
+/// address a JSON object field it needs to walk through — mirrors the
+/// `{parameter} does not address an object field` check in
+/// `machinewright project sweep` (`src/machinewright/commands/project.py`).
+#[derive(Debug, Error, PartialEq, Eq)]
+#[error("{path} does not address an object field")]
+pub struct SweepAxisError {
+    pub path: String,
+}
+
+/// Patches `document` at `path` (dot-separated segments, creating
+/// intermediate objects as needed) to `value`, mirroring the segment walk
+/// in `project.py`'s `sweep` command exactly so a sweep built in the native
+/// app and one run via that CLI command patch the same field the same way.
+/// Also the basis for a single control's edit (`machinewright-ui::controls`)
+/// — both patch one field of a full inputs document by the same dotted
+/// path convention.
+pub fn set_path(document: &mut Value, path: &str, value: Value) -> Result<(), SweepAxisError> {
+    let segments: Vec<&str> = path.split('.').collect();
+    let mut target = document;
+    for segment in &segments[..segments.len().saturating_sub(1)] {
+        let object = target.as_object_mut().ok_or_else(|| SweepAxisError {
+            path: path.to_owned(),
+        })?;
+        target = object
+            .entry((*segment).to_owned())
+            .or_insert_with(|| Value::Object(serde_json::Map::new()));
+    }
+    let Some(&last) = segments.last() else {
+        return Err(SweepAxisError {
+            path: path.to_owned(),
+        });
+    };
+    target
+        .as_object_mut()
+        .ok_or_else(|| SweepAxisError {
+            path: path.to_owned(),
+        })?
+        .insert(last.to_owned(), value);
+    Ok(())
+}
+
 impl Sweep {
     pub fn new(inputs: impl IntoIterator<Item = Value>) -> Self {
         Self {
@@ -43,6 +86,27 @@ impl Sweep {
                 .collect(),
             cancelled: false,
         }
+    }
+
+    /// Builds a sweep over `base` (a full inputs document) by patching
+    /// `parameter_path` to each of `values` in turn — the native app's
+    /// equivalent of `machinewright project sweep`'s per-point input
+    /// construction, so a sweep run in the app and the same range/point
+    /// count run via that CLI command evaluate identical per-point inputs.
+    pub fn from_axis(
+        base: &Value,
+        parameter_path: &str,
+        values: impl IntoIterator<Item = f64>,
+    ) -> Result<Self, SweepAxisError> {
+        let points = values
+            .into_iter()
+            .map(|value| {
+                let mut document = base.clone();
+                set_path(&mut document, parameter_path, Value::from(value))?;
+                Ok(document)
+            })
+            .collect::<Result<Vec<Value>, SweepAxisError>>()?;
+        Ok(Self::new(points))
     }
 
     pub fn cancel(&mut self) {
@@ -103,5 +167,59 @@ fn compare_at(path: &str, before: &Value, after: &Value, changes: &mut Vec<Seman
             after: Some(after.to_string()),
         }),
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn from_axis_patches_a_nested_dotted_path_creating_intermediate_objects() {
+        let base = json!({"requirements": {"payload_kg": 10.0}});
+        let sweep = Sweep::from_axis(&base, "requirements.payload_kg", [0.0, 30.0, 60.0]).unwrap();
+        let values: Vec<f64> = sweep
+            .points
+            .iter()
+            .map(|point| point.inputs["requirements"]["payload_kg"].as_f64().unwrap())
+            .collect();
+        assert_eq!(values, vec![0.0, 30.0, 60.0]);
+    }
+
+    #[test]
+    fn from_axis_creates_a_missing_intermediate_object() {
+        let base = json!({});
+        let sweep = Sweep::from_axis(&base, "requirements.payload_kg", [5.0]).unwrap();
+        assert_eq!(sweep.points[0].inputs, json!({"requirements": {"payload_kg": 5.0}}));
+    }
+
+    #[test]
+    fn from_axis_rejects_a_path_through_a_non_object_field() {
+        let base = json!({"requirements": "not an object"});
+        let error = Sweep::from_axis(&base, "requirements.payload_kg", [5.0]).unwrap_err();
+        assert_eq!(error.path, "requirements.payload_kg");
+    }
+
+    #[test]
+    fn cancel_mid_sweep_leaves_completed_points_untouched_and_only_flips_pending() {
+        let mut sweep = Sweep::new([json!({"a": 1}), json!({"a": 2}), json!({"a": 3})]);
+        // Complete the first point, leave the rest pending.
+        {
+            let first = sweep.next_pending().unwrap();
+            first.status = SweepStatus::Succeeded;
+            first.snapshot_path = Some("point-0000/evaluation-snapshot.json".into());
+        }
+        sweep.cancel();
+
+        assert_eq!(sweep.points[0].status, SweepStatus::Succeeded);
+        assert_eq!(
+            sweep.points[0].snapshot_path.as_deref(),
+            Some("point-0000/evaluation-snapshot.json")
+        );
+        assert_eq!(sweep.points[1].status, SweepStatus::Cancelled);
+        assert_eq!(sweep.points[2].status, SweepStatus::Cancelled);
+        // Cancellation is sticky: no further points can be pulled.
+        assert!(sweep.next_pending().is_none());
     }
 }
