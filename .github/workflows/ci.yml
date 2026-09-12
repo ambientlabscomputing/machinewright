@@ -1,0 +1,54 @@
+name: Machinewright CI
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --all-groups --frozen
+      - run: uv run python scripts/generate_protocol.py
+      - run: uv run python scripts/generate_schemas.py
+      - run: git diff --exit-code -- src/machinewright/protocol src/machinewright/schemas
+      - run: uv run ruff check .
+      - run: uv run mypy -p machinewright
+      - run: uv run pytest -q
+
+  app:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --all-groups --frozen
+      - uses: arduino/setup-protoc@v3
+        with:
+          version: "29.x"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm ci
+        working-directory: app
+      - run: npm run generate
+        working-directory: app
+      - run: git diff --exit-code -- app/src/protocol/worker app/src/model/generated
+      - run: npm run typecheck
+        working-directory: app
+      - run: npm run lint
+        working-directory: app
+      - run: npm test
+        working-directory: app
+      - run: npx jest
+        working-directory: app
+      - run: npm run build:web
+        working-directory: app
+      - run: pod install --project-directory=macos
+        working-directory: app
+      - run: |
+          xcodebuild -workspace MachinewrightApp.xcworkspace \
+            -scheme MachinewrightApp-macOS -configuration Debug \
+            -destination 'platform=macOS' build
+        working-directory: app/macos

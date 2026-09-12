@@ -1,0 +1,16 @@
+{
+  "color-surface-workspace": "#E8E9EB",
+  "color-surface-panel": "#F4F4F2",
+  "color-surface-control": "#FAFAF8",
+  "color-surface-display": "#202329",
+  "color-text-primary": "#25282D",
+  "color-text-secondary": "#5D626A",
+  "color-border-subtle": "#C8CBD0",
+  "color-accent-action": "#F65B24",
+  "color-accent-selection": "#007EA8",
+  "color-status-success": "#2E7D4F",
+  "color-status-warning": "#B26A00",
+  "color-status-error": "#B3261E",
+  "color-status-stale": "#8A8F98",
+  "color-status-pending": "#5D626A"
+}

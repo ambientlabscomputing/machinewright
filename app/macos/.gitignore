@@ -1,0 +1,12 @@
+# CocoaPods
+Pods/
+
+# Xcode
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+
+# Machine-specific Node path resolved by react-native-macos-init; .xcode.env
+# (committed) is the template each developer's local copy overrides.
+.xcode.env.local

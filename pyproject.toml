@@ -24,6 +24,18 @@ requires = ["uv_build>=0.10.0,<0.11.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
+# Spawned by the app's editor host (RFD-19 "Editor architecture") the same
+# way the worker is — installed into this project's own environment so the
+# app has a language server to talk to when this repo is the open project.
+# A real Machinewright project brings its own; this group only serves the
+# machinewright repo acting as its own M1-spike test project.
+editor = [
+    # Base python-lsp-server ships without any linter — pyflakes/pycodestyle
+    # are opt-in extras (confirmed via `importlib.metadata.requires`), not
+    # core dependencies, despite pylsp's own bundled plugin unconditionally
+    # importing them.
+    "python-lsp-server[pyflakes,pycodestyle]>=1.12.0",
+]
 dev = [
     "mypy>=1.15.0",
     "ruff>=0.16.2",

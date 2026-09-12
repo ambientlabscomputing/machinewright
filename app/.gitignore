@@ -1,0 +1,19 @@
+# node.js
+node_modules/
+npm-debug.log
+dist/
+
+# OSX
+.DS_Store
+
+# Metro / RN
+.metro-health-check*
+*.jsbundle
+
+# Bundled WebView surface builds (scripts/build-web-*.mjs, esbuild) — build
+# artifacts, rebuilt before packaging, not committed source like the
+# protocol/model codegen.
+web/*/dist/
+
+# testing
+/coverage

@@ -1,0 +1,21 @@
+{
+  "extends": "@react-native/typescript-config",
+  "compilerOptions": {
+    "noUncheckedIndexedAccess": true,
+    // Metro resolves platform-suffixed modules (WebView.macos.tsx over
+    // WebView.tsx) at bundle time; tsc needs this to match, or multi-
+    // platform packages like react-native-webview typecheck against their
+    // generic (non-macOS) declaration instead of the one actually bundled.
+    "moduleSuffixes": [".macos", ".native", ""],
+    // react-native-webview ships a stale top-level index.d.ts (a
+    // `class WebView<P = undefined>` whose `WebViewProps & P` collapses to
+    // `never`) that shadows its correct generated lib/ declarations purely
+    // for type resolution — runtime resolution via package.json "main" is
+    // unaffected. Redirect types only to the real declaration.
+    "paths": {
+      "react-native-webview": ["./node_modules/react-native-webview/lib/index.d.ts"]
+    }
+  },
+  "include": ["src", "tests", "App.tsx", "index.js"],
+  "exclude": ["**/node_modules", "**/Pods", "macos", "dist"]
+}

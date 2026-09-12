@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	App Sandbox is off deliberately, not omitted by oversight: RFD-19's
+	architecture requires spawning and owning a long-lived Python worker
+	subprocess (machinewright-worker) that lives outside the app bundle,
+	in whatever per-project virtualenv the user's machine resolves. macOS
+	App Sandbox disallows exec'ing arbitrary unbundled/unsigned executables
+	regardless of file-access entitlements, which would break this
+	fundamentally. Sandboxing is a Mac App Store distribution requirement,
+	not a general macOS one — Machinewright, like other developer tools
+	that shell out to project-local toolchains, is expected to distribute
+	outside the App Store (Developer ID + notarization), where sandboxing
+	is optional. Revisit only if App Store distribution is later required.
+	-->
+	<key>com.apple.security.app-sandbox</key>
+	<false/>
+	<key>com.apple.security.files.user-selected.read-only</key>
+	<true/>
+	<key>com.apple.security.network.client</key>
+	<true/>
+</dict>
+</plist>

@@ -1,0 +1,16 @@
+:root {
+  --mw-color-surface-workspace: #E8E9EB;
+  --mw-color-surface-panel: #F4F4F2;
+  --mw-color-surface-control: #FAFAF8;
+  --mw-color-surface-display: #202329;
+  --mw-color-text-primary: #25282D;
+  --mw-color-text-secondary: #5D626A;
+  --mw-color-border-subtle: #C8CBD0;
+  --mw-color-accent-action: #F65B24;
+  --mw-color-accent-selection: #007EA8;
+  --mw-color-status-success: #2E7D4F;
+  --mw-color-status-warning: #B26A00;
+  --mw-color-status-error: #B3261E;
+  --mw-color-status-stale: #8A8F98;
+  --mw-color-status-pending: #5D626A;
+}
