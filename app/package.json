@@ -32,6 +32,7 @@
     "react-native-macos": "^0.81.9",
     "react-native-safe-area-context": "^5.5.2",
     "react-native-webview": "^14.0.1",
+    "smol-toml": "^1.8.0",
     "text-encoding": "^0.7.0",
     "three": "^0.186.0"
   },

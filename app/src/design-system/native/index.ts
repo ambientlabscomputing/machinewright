@@ -7,3 +7,4 @@ export { StatusBadge, type StatusBadgeProps, type StatusTone } from "./StatusBad
 export { Field, type FieldProps } from "./Field";
 export { NumericInput, type NumericInputProps } from "./NumericInput";
 export { Slider, type SliderProps } from "./Slider";
+export { Resizable, type ResizableProps, type ResizeEdge } from "./Resizable";

@@ -6,10 +6,19 @@
  */
 import { NativeModules } from "react-native";
 
+export interface DirectoryEntry {
+  readonly name: string;
+  readonly isDirectory: boolean;
+  readonly path: string;
+}
+
 interface MachinewrightAssetsNativeModule {
   bundledAssetURL(relativePath: string): Promise<string>;
   readTextFile(path: string): Promise<string>;
   meshFileURL(path: string, expectedDigest: string): Promise<string>;
+  digestFile(path: string): Promise<string>;
+  writeTextFileAtomically(path: string, contents: string): Promise<void>;
+  listDirectory(path: string): Promise<DirectoryEntry[]>;
 }
 
 function nativeModule(): MachinewrightAssetsNativeModule {
@@ -41,4 +50,33 @@ export function readTextFile(path: string): Promise<string> {
  */
 export function getMeshFileURL(path: string, expectedDigest: string): Promise<string> {
   return nativeModule().meshFileURL(path, expectedDigest);
+}
+
+/**
+ * The `workspace/EnvironmentDigest.ts` `DigestPort` production
+ * implementation — the same SHA-256 the module already trusts for mesh
+ * digest validation above, exposed for an arbitrary file (e.g.
+ * `environment_lock`).
+ */
+export function digestFile(path: string): Promise<string> {
+  return nativeModule().digestFile(path);
+}
+
+/**
+ * The `cache/AcceptedPointer.ts` `PersistedAcceptedPointerPort` write
+ * primitive — writes via a temp file and an atomic rename so a reader can
+ * never observe a half-written "last accepted" pointer file.
+ */
+export function writeTextFileAtomically(path: string, contents: string): Promise<void> {
+  return nativeModule().writeTextFileAtomically(path, contents);
+}
+
+/**
+ * A single-level directory listing (directories first, then files, both
+ * case-insensitive) — what `app/FileExplorer.tsx`'s lazily-expanding tree
+ * requests each time the user expands one more directory, never a
+ * recursive upfront walk of the whole project.
+ */
+export function listDirectory(path: string): Promise<readonly DirectoryEntry[]> {
+  return nativeModule().listDirectory(path);
 }

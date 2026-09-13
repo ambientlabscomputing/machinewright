@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0C5FABAD08C1C63DA9A7EFC4 /* MachinewrightLspModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 56ACDEBDB3390D16B4C634C7 /* MachinewrightLspModule.m */; };
 		2242E600EAC9FC0EEC0313BF /* MachinewrightWorkerModule.m in Sources */ = {isa = PBXBuildFile; fileRef = EF052F87CC8E3B70658DC032 /* MachinewrightWorkerModule.m */; };
+		3BCEFD37D851C6D1561E46F8 /* MachinewrightFilePickerModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 335DE3D3EFD488D5134B2FDA /* MachinewrightFilePickerModule.swift */; };
 		460CD013BD89CA8170C60A5B /* MachinewrightWorkerModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F9310825D5A06CA1C2929DC /* MachinewrightWorkerModule.swift */; };
 		5142014D2437B4B30078DB4F /* AppDelegate.mm in Sources */ = {isa = PBXBuildFile; fileRef = 5142014C2437B4B30078DB4F /* AppDelegate.mm */; };
 		514201522437B4B40078DB4F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 514201512437B4B40078DB4F /* Assets.xcassets */; };
@@ -20,6 +21,7 @@
 		C9B25DFBB7E6DCF958A359D3 /* MachinewrightLspModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28459A5F8C9DFD2F8940A9D9 /* MachinewrightLspModule.swift */; };
 		D56B5580F46A0DB95E0984A1 /* web in Resources */ = {isa = PBXBuildFile; fileRef = AA77C7FC6D2F7503F4E493FD /* web */; };
 		DC15B44D45F9C83D8C6F654A /* libPods-MachinewrightApp-macOS.a in Frameworks */ = {isa = PBXBuildFile; fileRef = F2DDFE3C814DF0C613A09057 /* libPods-MachinewrightApp-macOS.a */; };
+		F287FB775C528982460D9562 /* MachinewrightFilePickerModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 87A034AF48DDC6217808DF14 /* MachinewrightFilePickerModule.m */; };
 		FFDAAEC6441F81E002C89C59 /* MachinewrightAssetsModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B2D7DF69465C68AE6AA943A /* MachinewrightAssetsModule.swift */; };
 /* End PBXBuildFile section */
 
@@ -29,6 +31,7 @@
 		218278D8F620D46B6DC4C73C /* MachinewrightAssetsModule.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = MachinewrightAssetsModule.m; sourceTree = "<group>"; };
 		28459A5F8C9DFD2F8940A9D9 /* MachinewrightLspModule.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MachinewrightLspModule.swift; sourceTree = "<group>"; };
 		3145D9E38FDD67D0D1B34A9E /* Pods-MachinewrightApp-macOS.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MachinewrightApp-macOS.debug.xcconfig"; path = "Target Support Files/Pods-MachinewrightApp-macOS/Pods-MachinewrightApp-macOS.debug.xcconfig"; sourceTree = "<group>"; };
+		335DE3D3EFD488D5134B2FDA /* MachinewrightFilePickerModule.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MachinewrightFilePickerModule.swift; sourceTree = "<group>"; };
 		3B2D7DF69465C68AE6AA943A /* MachinewrightAssetsModule.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MachinewrightAssetsModule.swift; sourceTree = "<group>"; };
 		4F9310825D5A06CA1C2929DC /* MachinewrightWorkerModule.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MachinewrightWorkerModule.swift; sourceTree = "<group>"; };
 		514201492437B4B30078DB4F /* MachinewrightApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MachinewrightApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -40,6 +43,7 @@
 		514201572437B4B40078DB4F /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
 		514201592437B4B40078DB4F /* MachinewrightApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MachinewrightApp.entitlements; sourceTree = "<group>"; };
 		56ACDEBDB3390D16B4C634C7 /* MachinewrightLspModule.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = MachinewrightLspModule.m; sourceTree = "<group>"; };
+		87A034AF48DDC6217808DF14 /* MachinewrightFilePickerModule.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = MachinewrightFilePickerModule.m; sourceTree = "<group>"; };
 		AA77C7FC6D2F7503F4E493FD /* web */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder; name = web; path = ../../web; sourceTree = "<group>"; };
 		C69F86FFB1EC87B74BB1B08B /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
@@ -94,6 +98,8 @@
 				AA77C7FC6D2F7503F4E493FD /* web */,
 				28459A5F8C9DFD2F8940A9D9 /* MachinewrightLspModule.swift */,
 				56ACDEBDB3390D16B4C634C7 /* MachinewrightLspModule.m */,
+				335DE3D3EFD488D5134B2FDA /* MachinewrightFilePickerModule.swift */,
+				87A034AF48DDC6217808DF14 /* MachinewrightFilePickerModule.m */,
 			);
 			path = "MachinewrightApp-macOS";
 			sourceTree = "<group>";
@@ -360,6 +366,8 @@
 				8F9B26F7C34172B289DEC982 /* MachinewrightAssetsModule.m in Sources */,
 				C9B25DFBB7E6DCF958A359D3 /* MachinewrightLspModule.swift in Sources */,
 				0C5FABAD08C1C63DA9A7EFC4 /* MachinewrightLspModule.m in Sources */,
+				3BCEFD37D851C6D1561E46F8 /* MachinewrightFilePickerModule.swift in Sources */,
+				F287FB775C528982460D9562 /* MachinewrightFilePickerModule.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

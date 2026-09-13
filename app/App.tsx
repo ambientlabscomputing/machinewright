@@ -1,13 +1,9 @@
 /**
- * B.1 spike screen: bare RN macOS shell + native worker spawn + protocol
- * round-trip proof (RFD-19 architecture-spike steps 1, 4, 11, 12).
- *
- * This intentionally is NOT the product shell — src/app/ owns that once
- * M2 starts. It exists to prove, inside the actual packaged app (not just
- * the Node-based contract test), that the native bridge can spawn the real
- * Python worker, exchange Hello/CapabilityReport, run one evaluation
- * against the reference project, and surface a typed failure if the
- * worker process dies — the concrete exit criterion for this phase.
+ * Application entry point. `AppShell` (src/app/AppShell.tsx) is the real
+ * Machinewright product surface built in M2. The B.1-B.7 architecture-spike
+ * screens that predate it stay reachable under "Dev Tools" — each remains
+ * independently re-verifiable from its own tab, exactly as it was before
+ * M2, just no longer the default experience.
  */
 import { useCallback, useRef, useState } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -20,6 +16,7 @@ import { EditorHost } from "./src/editor/EditorHost";
 import { SelectionSyncSpike } from "./src/app/SelectionSyncSpike";
 import { PerformanceSpike } from "./src/app/PerformanceSpike";
 import { ComponentGallery } from "./src/design-system/gallery/ComponentGallery";
+import { AppShell } from "./src/app/AppShell";
 import { colors } from "./src/design-system/tokens/colors";
 
 // Spike-only: a real project-open flow (native file picker → workspace/)
@@ -146,70 +143,96 @@ function WorkerBridgeSpike() {
   );
 }
 
-type Screen = "worker-bridge" | "webview-host" | "editor" | "selection-sync" | "gallery" | "performance";
+type DevToolsScreen = "worker-bridge" | "webview-host" | "editor" | "selection-sync" | "gallery" | "performance";
 
 /**
- * Spike-only tab switch between the independent B.1-B.6 proofs — src/app/
- * owns real navigation once M2 starts. Kept as one screen so every spike
- * stays reachable and independently re-verifiable from a single build.
+ * Spike-only tab switch between the independent B.1-B.6 proofs, kept as one
+ * screen so every spike stays reachable and independently re-verifiable
+ * from a single build.
  */
+function DevTools() {
+  const [screen, setScreen] = useState<DevToolsScreen>("worker-bridge");
+
+  return (
+    <View style={styles.root}>
+      <View style={styles.tabBar}>
+        <Text
+          onPress={() => setScreen("worker-bridge")}
+          style={[styles.tab, screen === "worker-bridge" && styles.tabActive]}
+        >
+          Worker bridge (B.1)
+        </Text>
+        <Text
+          onPress={() => setScreen("webview-host")}
+          style={[styles.tab, screen === "webview-host" && styles.tabActive]}
+        >
+          WebView host (B.2)
+        </Text>
+        <Text
+          onPress={() => setScreen("editor")}
+          style={[styles.tab, screen === "editor" && styles.tabActive]}
+        >
+          Editor + LSP (B.3)
+        </Text>
+        <Text
+          onPress={() => setScreen("selection-sync")}
+          style={[styles.tab, screen === "selection-sync" && styles.tabActive]}
+        >
+          Selection sync (B.5)
+        </Text>
+        <Text
+          onPress={() => setScreen("gallery")}
+          style={[styles.tab, screen === "gallery" && styles.tabActive]}
+        >
+          Design system (B.6)
+        </Text>
+        <Text
+          onPress={() => setScreen("performance")}
+          style={[styles.tab, screen === "performance" && styles.tabActive]}
+        >
+          Performance (B.7)
+        </Text>
+      </View>
+      {screen === "worker-bridge" ? (
+        <WorkerBridgeSpike />
+      ) : screen === "webview-host" ? (
+        <ViewportHost />
+      ) : screen === "editor" ? (
+        <EditorHost />
+      ) : screen === "selection-sync" ? (
+        <SelectionSyncSpike />
+      ) : screen === "gallery" ? (
+        <ComponentGallery />
+      ) : (
+        <PerformanceSpike />
+      )}
+    </View>
+  );
+}
+
+type Screen = "product" | "dev-tools";
+
 function App() {
-  const [screen, setScreen] = useState<Screen>("worker-bridge");
+  const [screen, setScreen] = useState<Screen>("product");
 
   return (
     <SafeAreaProvider>
       <View style={styles.root}>
         <View style={styles.tabBar}>
           <Text
-            onPress={() => setScreen("worker-bridge")}
-            style={[styles.tab, screen === "worker-bridge" && styles.tabActive]}
+            onPress={() => setScreen("product")}
+            style={[styles.tab, screen === "product" && styles.tabActive]}
           >
-            Worker bridge (B.1)
+            Machinewright
           </Text>
           <Text
-            onPress={() => setScreen("webview-host")}
-            style={[styles.tab, screen === "webview-host" && styles.tabActive]}
+            onPress={() => setScreen("dev-tools")}
+            style={[styles.tab, screen === "dev-tools" && styles.tabActive]}
           >
-            WebView host (B.2)
-          </Text>
-          <Text
-            onPress={() => setScreen("editor")}
-            style={[styles.tab, screen === "editor" && styles.tabActive]}
-          >
-            Editor + LSP (B.3)
-          </Text>
-          <Text
-            onPress={() => setScreen("selection-sync")}
-            style={[styles.tab, screen === "selection-sync" && styles.tabActive]}
-          >
-            Selection sync (B.5)
-          </Text>
-          <Text
-            onPress={() => setScreen("gallery")}
-            style={[styles.tab, screen === "gallery" && styles.tabActive]}
-          >
-            Design system (B.6)
-          </Text>
-          <Text
-            onPress={() => setScreen("performance")}
-            style={[styles.tab, screen === "performance" && styles.tabActive]}
-          >
-            Performance (B.7)
+            Dev Tools
           </Text>
         </View>
-        {screen === "worker-bridge" ? (
-          <WorkerBridgeSpike />
-        ) : screen === "webview-host" ? (
-          <ViewportHost />
-        ) : screen === "editor" ? (
-          <EditorHost />
-        ) : screen === "selection-sync" ? (
-          <SelectionSyncSpike />
-        ) : screen === "gallery" ? (
-          <ComponentGallery />
-        ) : (
-          <PerformanceSpike />
-        )}
+        {screen === "product" ? <AppShell /> : <DevTools />}
       </View>
     </SafeAreaProvider>
   );

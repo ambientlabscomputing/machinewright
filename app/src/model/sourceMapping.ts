@@ -17,7 +17,7 @@
  * mapping: both take the *first* array match, deliberately, matching the
  * already-narrowest-first data.
  */
-import type { EvaluationSnapshot } from "./generated/EvaluationSnapshot";
+import type { EvaluationSnapshot, SourceMapping } from "./generated/EvaluationSnapshot";
 
 export interface ResolvedSpan {
   readonly path: string;
@@ -36,13 +36,7 @@ export function resolveNodeIdsAtOffset(
   path: string,
   byteOffset: number,
 ): readonly string[] {
-  for (const mapping of snapshot.source_mappings ?? []) {
-    if (mapping.span.path !== path) continue;
-    if (byteOffset >= mapping.span.start_byte && byteOffset <= mapping.span.end_byte) {
-      return mapping.node_ids;
-    }
-  }
-  return [];
+  return resolveNodeIdsInMappings(snapshot.source_mappings ?? [], path, byteOffset);
 }
 
 /**
@@ -54,7 +48,35 @@ export function resolveSpanForNodeId(
   snapshot: EvaluationSnapshot,
   nodeId: string,
 ): ResolvedSpan | null {
-  for (const mapping of snapshot.source_mappings ?? []) {
+  return resolveSpanInMappings(snapshot.source_mappings ?? [], nodeId);
+}
+
+/**
+ * Same as `resolveNodeIdsAtOffset`, taking the mapping array directly
+ * rather than a whole `EvaluationSnapshot` — for callers (e.g.
+ * `app/AppShell.tsx`) already holding a `ProjectSnapshot.sourceMap` rather
+ * than a raw worker `EvaluationSnapshot`.
+ */
+export function resolveNodeIdsInMappings(
+  sourceMappings: readonly SourceMapping[],
+  path: string,
+  byteOffset: number,
+): readonly string[] {
+  for (const mapping of sourceMappings) {
+    if (mapping.span.path !== path) continue;
+    if (byteOffset >= mapping.span.start_byte && byteOffset <= mapping.span.end_byte) {
+      return mapping.node_ids;
+    }
+  }
+  return [];
+}
+
+/** Same as `resolveSpanForNodeId`, taking the mapping array directly — see `resolveNodeIdsInMappings`. */
+export function resolveSpanInMappings(
+  sourceMappings: readonly SourceMapping[],
+  nodeId: string,
+): ResolvedSpan | null {
+  for (const mapping of sourceMappings) {
     if (mapping.node_ids.includes(nodeId)) {
       return {
         path: mapping.span.path,

@@ -1,0 +1,18 @@
+digraph hardware {
+  rankdir=LR;
+  "machinewright.reference.simple" [label="machinewright.reference.simple\nassembly"];
+  "machinewright.reference.simple/base_plate" [label="base_plate\npart"];
+  "machinewright.reference.simple/pin_pair" [label="pin_pair\nassembly"];
+  "machinewright.reference.simple/pin_pair/lower_pin" [label="lower_pin\npart"];
+  "machinewright.reference.simple/pin_pair/upper_pin" [label="upper_pin\npart"];
+  "machinewright.reference.simple/top_pin" [label="top_pin\npart"];
+  "machinewright.reference.simple" -> "machinewright.reference.simple/base_plate" [label="contains"];
+  "machinewright.reference.simple" -> "machinewright.reference.simple/pin_pair" [label="contains"];
+  "machinewright.reference.simple/pin_pair" -> "machinewright.reference.simple/pin_pair/lower_pin" [label="contains"];
+  "machinewright.reference.simple/pin_pair" -> "machinewright.reference.simple/pin_pair/upper_pin" [label="contains"];
+  "machinewright.reference.simple" -> "machinewright.reference.simple/top_pin" [label="contains"];
+  "machinewright.reference.simple/base_plate" -> "machinewright.reference.simple/top_pin" [style=dashed,label="mechanical"];
+  "machinewright.reference.simple/base_plate" -> "machinewright.reference.simple/top_pin" [style=dashed,label="electrical_power"];
+  "machinewright.reference.simple/base_plate" -> "machinewright.reference.simple/top_pin" [style=dashed,label="signal"];
+  "machinewright.reference.simple/base_plate" -> "machinewright.reference.simple/top_pin" [style=dashed,label="thermal"];
+}

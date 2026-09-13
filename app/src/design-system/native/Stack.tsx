@@ -16,6 +16,14 @@ export interface StackProps extends Omit<ViewProps, "style"> {
   readonly justify?: "flex-start" | "center" | "flex-end" | "space-between" | "space-around";
   readonly flex?: number;
   readonly wrap?: boolean;
+  /**
+   * Indentation depth, in multiples of the `md` spacing token — for
+   * tree/list rows (e.g. `graph/GraphTree.tsx`'s node depth). This is a
+   * structural, token-derived value like `flex`, not a raw style escape:
+   * RFD-19's design-language enforcement explicitly allows "explicit
+   * structural values such as flex factors" alongside token references.
+   */
+  readonly indentLevel?: number;
 }
 
 export function Stack({
@@ -25,6 +33,7 @@ export function Stack({
   justify,
   flex,
   wrap = false,
+  indentLevel = 0,
   ...props
 }: StackProps) {
   return (
@@ -37,6 +46,7 @@ export function Stack({
         justifyContent: justify,
         flex,
         flexWrap: wrap ? "wrap" : "nowrap",
+        marginLeft: indentLevel > 0 ? spacing.md * indentLevel : undefined,
       }}
     />
   );

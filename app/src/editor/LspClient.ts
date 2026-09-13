@@ -11,6 +11,19 @@
  * byte-offset `ByteRange` (src/protocol/surfaces/editor.ts) via
  * src/editor/offsets.ts before reaching the rest of the app, so nothing
  * downstream needs to know LSP uses UTF-16 line/character positions.
+ *
+ * R10 fix (deleted Rust UI review: "the LSP message limit does not bound a
+ * silent server... a server that publishes nothing can block indefinitely").
+ * `request()` below times out and rejects rather than waiting forever — a
+ * language server that never responds to `initialize` must not hang
+ * `start()` (and therefore the whole editor surface) indefinitely; the
+ * caller can catch the rejection and surface a failed/degraded LSP status
+ * instead. `didOpen`/`didChange` are already fire-and-forget notifications
+ * (never awaiting a response), so a stuck request cannot block newer
+ * document-change delivery either way — no separate pending-request cap is
+ * needed for this client's current shape (only `initialize` ever awaits a
+ * response), but one should be added here if a future capability adds a
+ * second awaited request method.
  */
 import { LspBridge } from "./LspBridge";
 import { lspPositionToUtf8ByteOffset, type LspPosition } from "./offsets";
@@ -42,8 +55,11 @@ function severityToEditorSeverity(severity: number | undefined): EditorDiagnosti
   return "info";
 }
 
+const DEFAULT_REQUEST_TIMEOUT_MS = 5000;
+
 export class LspClient {
   private readonly bridge = new LspBridge();
+  private readonly requestTimeoutMs: number;
   private nextId = 1;
   private readonly pending = new Map<
     number,
@@ -53,6 +69,10 @@ export class LspClient {
   private unsubscribeMessage: (() => void) | null = null;
 
   onDiagnostics: ((uri: string, diagnostics: readonly EditorDiagnostic[]) => void) | null = null;
+
+  constructor(options: { requestTimeoutMs?: number } = {}) {
+    this.requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+  }
 
   async start(executablePath: string, rootUri: string): Promise<void> {
     this.unsubscribeMessage = this.bridge.onMessage((message) => this.handleMessage(message));
@@ -126,7 +146,24 @@ export class LspClient {
     const id = this.nextId++;
     const payload: JsonRpcRequest = { jsonrpc: "2.0", id, method, params };
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+      const timeout = setTimeout(() => {
+        this.pending.delete(id);
+        reject(
+          new Error(
+            `LSP request '${method}' (id ${id}) timed out after ${this.requestTimeoutMs}ms — server appears unresponsive`,
+          ),
+        );
+      }, this.requestTimeoutMs);
+      this.pending.set(id, {
+        resolve: (value) => {
+          clearTimeout(timeout);
+          resolve(value);
+        },
+        reject: (error) => {
+          clearTimeout(timeout);
+          reject(error);
+        },
+      });
       void this.bridge.send(payload);
     });
   }
