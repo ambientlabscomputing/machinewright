@@ -15,6 +15,7 @@ import { ViewportHost } from "./src/viewport/ViewportHost";
 import { EditorHost } from "./src/editor/EditorHost";
 import { SelectionSyncSpike } from "./src/app/SelectionSyncSpike";
 import { PerformanceSpike } from "./src/app/PerformanceSpike";
+import { BehaviorLabSpike } from "./src/app/BehaviorLabSpike";
 import { ComponentGallery } from "./src/design-system/gallery/ComponentGallery";
 import { AppShell } from "./src/app/AppShell";
 import { colors } from "./src/design-system/tokens/colors";
@@ -143,7 +144,14 @@ function WorkerBridgeSpike() {
   );
 }
 
-type DevToolsScreen = "worker-bridge" | "webview-host" | "editor" | "selection-sync" | "gallery" | "performance";
+type DevToolsScreen =
+  | "worker-bridge"
+  | "webview-host"
+  | "editor"
+  | "selection-sync"
+  | "gallery"
+  | "performance"
+  | "behavior-lab";
 
 /**
  * Spike-only tab switch between the independent B.1-B.6 proofs, kept as one
@@ -192,6 +200,12 @@ function DevTools() {
         >
           Performance (B.7)
         </Text>
+        <Text
+          onPress={() => setScreen("behavior-lab")}
+          style={[styles.tab, screen === "behavior-lab" && styles.tabActive]}
+        >
+          Behavior lab (M3)
+        </Text>
       </View>
       {screen === "worker-bridge" ? (
         <WorkerBridgeSpike />
@@ -203,8 +217,10 @@ function DevTools() {
         <SelectionSyncSpike />
       ) : screen === "gallery" ? (
         <ComponentGallery />
-      ) : (
+      ) : screen === "performance" ? (
         <PerformanceSpike />
+      ) : (
+        <BehaviorLabSpike />
       )}
     </View>
   );

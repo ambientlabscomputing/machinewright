@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file machinewright_worker.proto.
  */
 export const file_machinewright_worker: GenFile = /*@__PURE__*/
-  fileDesc("ChptYWNoaW5ld3JpZ2h0X3dvcmtlci5wcm90bxIXbWFjaGluZXdyaWdodC53b3JrZXIudjEiNwoFSGVsbG8SGAoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoDRIUCgxjYXBhYmlsaXRpZXMYAiADKAkiNwoNU291cmNlT3ZlcmxheRIVCg1yZWxhdGl2ZV9wYXRoGAEgASgJEg8KB2NvbnRlbnQYAiABKAwigwIKD0V2YWx1YXRlUHJvamVjdBISCgpzZXNzaW9uX2lkGAEgASgJEhIKCmdlbmVyYXRpb24YAiABKAQSFAoMcHJvamVjdF9yb290GAMgASgJEhMKC3RlbXBsYXRlX2lkGAQgASgJEhgKEHRlbXBsYXRlX3ZlcnNpb24YBSABKAkSEwoLaW5wdXRzX2pzb24YBiABKAwSGAoQb3V0cHV0X2RpcmVjdG9yeRgHIAEoCRI4CghvdmVybGF5cxgIIAMoCzImLm1hY2hpbmV3cmlnaHQud29ya2VyLnYxLlNvdXJjZU92ZXJsYXkSGgoSZW52aXJvbm1lbnRfZGlnZXN0GAkgASgJIjoKEENhbmNlbEV2YWx1YXRpb24SEgoKc2Vzc2lvbl9pZBgBIAEoCRISCgpnZW5lcmF0aW9uGAIgASgEIgoKCFNodXRkb3duIv0BCg1Xb3JrZXJSZXF1ZXN0Ei8KBWhlbGxvGAEgASgLMh4ubWFjaGluZXdyaWdodC53b3JrZXIudjEuSGVsbG9IABI8CghldmFsdWF0ZRgCIAEoCzIoLm1hY2hpbmV3cmlnaHQud29ya2VyLnYxLkV2YWx1YXRlUHJvamVjdEgAEjsKBmNhbmNlbBgDIAEoCzIpLm1hY2hpbmV3cmlnaHQud29ya2VyLnYxLkNhbmNlbEV2YWx1YXRpb25IABI1CghzaHV0ZG93bhgEIAEoCzIhLm1hY2hpbmV3cmlnaHQud29ya2VyLnYxLlNodXRkb3duSABCCQoHcmVxdWVzdCK/AQoQQ2FwYWJpbGl0eVJlcG9ydBIYChBwcm90b2NvbF92ZXJzaW9uGAEgASgNEhQKDGNhcGFiaWxpdGllcxgCIAMoCRIWCg5weXRob25fdmVyc2lvbhgDIAEoCRITCgtpbnRlcnByZXRlchgEIAEoCRIdChVtYWNoaW5ld3JpZ2h0X3ZlcnNpb24YBSABKAkSGwoTY2FkX2JhY2tlbmRfdmVyc2lvbhgGIAEoCRISCgp0cmFuc3BvcnRzGAcgAygJIn4KEkV2YWx1YXRpb25Qcm9ncmVzcxISCgpzZXNzaW9uX2lkGAEgASgJEhIKCmdlbmVyYXRpb24YAiABKAQSDQoFc3RhZ2UYAyABKAkSEQoJY29tcGxldGVkGAQgASgNEg0KBXRvdGFsGAUgASgNEg8KB21lc3NhZ2UYBiABKAkiVgoSUGFydGlhbERpYWdub3N0aWNzEhIKCnNlc3Npb25faWQYASABKAkSEgoKZ2VuZXJhdGlvbhgCIAEoBBIYChBkaWFnbm9zdGljc19qc29uGAMgASgMIjUKDFNvdXJjZURpZ2VzdBIVCg1yZWxhdGl2ZV9wYXRoGAEgASgJEg4KBmRpZ2VzdBgCIAEoCSLOAQoTRXZhbHVhdGlvbkNvbXBsZXRlZBISCgpzZXNzaW9uX2lkGAEgASgJEhIKCmdlbmVyYXRpb24YAiABKAQSFQoNc25hcHNob3RfcGF0aBgDIAEoCRIUCgxncmFwaF9kaWdlc3QYBCABKAkSIAoYYXJ0aWZhY3RfbWFuaWZlc3RfZGlnZXN0GAUgASgJEkAKEWV2YWx1YXRlZF9zb3VyY2VzGAYgAygLMiUubWFjaGluZXdyaWdodC53b3JrZXIudjEuU291cmNlRGlnZXN0IoYBChBFdmFsdWF0aW9uRmFpbGVkEhIKCnNlc3Npb25faWQYASABKAkSEgoKZ2VuZXJhdGlvbhgCIAEoBBIMCgRjb2RlGAMgASgJEg8KB21lc3NhZ2UYBCABKAkSEQoJdHJhY2ViYWNrGAUgASgJEhgKEGRpYWdub3N0aWNzX2pzb24YBiABKAwiPQoTRXZhbHVhdGlvbkNhbmNlbGxlZBISCgpzZXNzaW9uX2lkGAEgASgJEhIKCmdlbmVyYXRpb24YAiABKAQioQMKC1dvcmtlckV2ZW50EkEKDGNhcGFiaWxpdGllcxgBIAEoCzIpLm1hY2hpbmV3cmlnaHQud29ya2VyLnYxLkNhcGFiaWxpdHlSZXBvcnRIABI/Cghwcm9ncmVzcxgCIAEoCzIrLm1hY2hpbmV3cmlnaHQud29ya2VyLnYxLkV2YWx1YXRpb25Qcm9ncmVzc0gAEkIKC2RpYWdub3N0aWNzGAMgASgLMisubWFjaGluZXdyaWdodC53b3JrZXIudjEuUGFydGlhbERpYWdub3N0aWNzSAASQQoJY29tcGxldGVkGAQgASgLMiwubWFjaGluZXdyaWdodC53b3JrZXIudjEuRXZhbHVhdGlvbkNvbXBsZXRlZEgAEjsKBmZhaWxlZBgFIAEoCzIpLm1hY2hpbmV3cmlnaHQud29ya2VyLnYxLkV2YWx1YXRpb25GYWlsZWRIABJBCgljYW5jZWxsZWQYBiABKAsyLC5tYWNoaW5ld3JpZ2h0Lndvcmtlci52MS5FdmFsdWF0aW9uQ2FuY2VsbGVkSABCBwoFZXZlbnRiBnByb3RvMw");
+  fileDesc("ChptYWNoaW5ld3JpZ2h0X3dvcmtlci5wcm90bxIXbWFjaGluZXdyaWdodC53b3JrZXIudjEiNwoFSGVsbG8SGAoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoDRIUCgxjYXBhYmlsaXRpZXMYAiADKAkiNwoNU291cmNlT3ZlcmxheRIVCg1yZWxhdGl2ZV9wYXRoGAEgASgJEg8KB2NvbnRlbnQYAiABKAwigwIKD0V2YWx1YXRlUHJvamVjdBISCgpzZXNzaW9uX2lkGAEgASgJEhIKCmdlbmVyYXRpb24YAiABKAQSFAoMcHJvamVjdF9yb290GAMgASgJEhMKC3RlbXBsYXRlX2lkGAQgASgJEhgKEHRlbXBsYXRlX3ZlcnNpb24YBSABKAkSEwoLaW5wdXRzX2pzb24YBiABKAwSGAoQb3V0cHV0X2RpcmVjdG9yeRgHIAEoCRI4CghvdmVybGF5cxgIIAMoCzImLm1hY2hpbmV3cmlnaHQud29ya2VyLnYxLlNvdXJjZU92ZXJsYXkSGgoSZW52aXJvbm1lbnRfZGlnZXN0GAkgASgJIjoKEENhbmNlbEV2YWx1YXRpb24SEgoKc2Vzc2lvbl9pZBgBIAEoCRISCgpnZW5lcmF0aW9uGAIgASgEIgoKCFNodXRkb3duIjgKD1N3ZWVwQ29vcmRpbmF0ZRIWCg5wYXJhbWV0ZXJfcGF0aBgBIAEoCRINCgV2YWx1ZRgCIAEoASLhAgoSRXZhbHVhdGVTd2VlcFBvaW50EhIKCnNlc3Npb25faWQYASABKAkSEAoIc3dlZXBfaWQYAiABKAQSEwoLcG9pbnRfaW5kZXgYAyABKA0SPQoLY29vcmRpbmF0ZXMYBCADKAsyKC5tYWNoaW5ld3JpZ2h0Lndvcmtlci52MS5Td2VlcENvb3JkaW5hdGUSFAoMcHJvamVjdF9yb290GAUgASgJEhMKC3RlbXBsYXRlX2lkGAYgASgJEhgKEHRlbXBsYXRlX3ZlcnNpb24YByABKAkSHAoUYmFzZWxpbmVfaW5wdXRzX2pzb24YCCABKAwSGAoQb3V0cHV0X2RpcmVjdG9yeRgJIAEoCRI4CghvdmVybGF5cxgKIAMoCzImLm1hY2hpbmV3cmlnaHQud29ya2VyLnYxLlNvdXJjZU92ZXJsYXkSGgoSZW52aXJvbm1lbnRfZGlnZXN0GAsgASgJIjMKC0NhbmNlbFN3ZWVwEhIKCnNlc3Npb25faWQYASABKAkSEAoIc3dlZXBfaWQYAiABKAQiiAMKDVdvcmtlclJlcXVlc3QSLwoFaGVsbG8YASABKAsyHi5tYWNoaW5ld3JpZ2h0Lndvcmtlci52MS5IZWxsb0gAEjwKCGV2YWx1YXRlGAIgASgLMigubWFjaGluZXdyaWdodC53b3JrZXIudjEuRXZhbHVhdGVQcm9qZWN0SAASOwoGY2FuY2VsGAMgASgLMikubWFjaGluZXdyaWdodC53b3JrZXIudjEuQ2FuY2VsRXZhbHVhdGlvbkgAEjUKCHNodXRkb3duGAQgASgLMiEubWFjaGluZXdyaWdodC53b3JrZXIudjEuU2h1dGRvd25IABJLChRldmFsdWF0ZV9zd2VlcF9wb2ludBgFIAEoCzIrLm1hY2hpbmV3cmlnaHQud29ya2VyLnYxLkV2YWx1YXRlU3dlZXBQb2ludEgAEjwKDGNhbmNlbF9zd2VlcBgGIAEoCzIkLm1hY2hpbmV3cmlnaHQud29ya2VyLnYxLkNhbmNlbFN3ZWVwSABCCQoHcmVxdWVzdCK/AQoQQ2FwYWJpbGl0eVJlcG9ydBIYChBwcm90b2NvbF92ZXJzaW9uGAEgASgNEhQKDGNhcGFiaWxpdGllcxgCIAMoCRIWCg5weXRob25fdmVyc2lvbhgDIAEoCRITCgtpbnRlcnByZXRlchgEIAEoCRIdChVtYWNoaW5ld3JpZ2h0X3ZlcnNpb24YBSABKAkSGwoTY2FkX2JhY2tlbmRfdmVyc2lvbhgGIAEoCRISCgp0cmFuc3BvcnRzGAcgAygJIn4KEkV2YWx1YXRpb25Qcm9ncmVzcxISCgpzZXNzaW9uX2lkGAEgASgJEhIKCmdlbmVyYXRpb24YAiABKAQSDQoFc3RhZ2UYAyABKAkSEQoJY29tcGxldGVkGAQgASgNEg0KBXRvdGFsGAUgASgNEg8KB21lc3NhZ2UYBiABKAkiVgoSUGFydGlhbERpYWdub3N0aWNzEhIKCnNlc3Npb25faWQYASABKAkSEgoKZ2VuZXJhdGlvbhgCIAEoBBIYChBkaWFnbm9zdGljc19qc29uGAMgASgMIjUKDFNvdXJjZURpZ2VzdBIVCg1yZWxhdGl2ZV9wYXRoGAEgASgJEg4KBmRpZ2VzdBgCIAEoCSLOAQoTRXZhbHVhdGlvbkNvbXBsZXRlZBISCgpzZXNzaW9uX2lkGAEgASgJEhIKCmdlbmVyYXRpb24YAiABKAQSFQoNc25hcHNob3RfcGF0aBgDIAEoCRIUCgxncmFwaF9kaWdlc3QYBCABKAkSIAoYYXJ0aWZhY3RfbWFuaWZlc3RfZGlnZXN0GAUgASgJEkAKEWV2YWx1YXRlZF9zb3VyY2VzGAYgAygLMiUubWFjaGluZXdyaWdodC53b3JrZXIudjEuU291cmNlRGlnZXN0IoYBChBFdmFsdWF0aW9uRmFpbGVkEhIKCnNlc3Npb25faWQYASABKAkSEgoKZ2VuZXJhdGlvbhgCIAEoBBIMCgRjb2RlGAMgASgJEg8KB21lc3NhZ2UYBCABKAkSEQoJdHJhY2ViYWNrGAUgASgJEhgKEGRpYWdub3N0aWNzX2pzb24YBiABKAwiPQoTRXZhbHVhdGlvbkNhbmNlbGxlZBISCgpzZXNzaW9uX2lkGAEgASgJEhIKCmdlbmVyYXRpb24YAiABKAQinwEKE1N3ZWVwUG9pbnRDb21wbGV0ZWQSEgoKc2Vzc2lvbl9pZBgBIAEoCRIQCghzd2VlcF9pZBgCIAEoBBITCgtwb2ludF9pbmRleBgDIAEoDRIVCg1zbmFwc2hvdF9wYXRoGAQgASgJEhQKDGdyYXBoX2RpZ2VzdBgFIAEoCRIgChhhcnRpZmFjdF9tYW5pZmVzdF9kaWdlc3QYBiABKAkibAoQU3dlZXBQb2ludEZhaWxlZBISCgpzZXNzaW9uX2lkGAEgASgJEhAKCHN3ZWVwX2lkGAIgASgEEhMKC3BvaW50X2luZGV4GAMgASgNEgwKBGNvZGUYBCABKAkSDwoHbWVzc2FnZRgFIAEoCSJQChNTd2VlcFBvaW50Q2FuY2VsbGVkEhIKCnNlc3Npb25faWQYASABKAkSEAoIc3dlZXBfaWQYAiABKAQSEwoLcG9pbnRfaW5kZXgYAyABKA0iiAUKC1dvcmtlckV2ZW50EkEKDGNhcGFiaWxpdGllcxgBIAEoCzIpLm1hY2hpbmV3cmlnaHQud29ya2VyLnYxLkNhcGFiaWxpdHlSZXBvcnRIABI/Cghwcm9ncmVzcxgCIAEoCzIrLm1hY2hpbmV3cmlnaHQud29ya2VyLnYxLkV2YWx1YXRpb25Qcm9ncmVzc0gAEkIKC2RpYWdub3N0aWNzGAMgASgLMisubWFjaGluZXdyaWdodC53b3JrZXIudjEuUGFydGlhbERpYWdub3N0aWNzSAASQQoJY29tcGxldGVkGAQgASgLMiwubWFjaGluZXdyaWdodC53b3JrZXIudjEuRXZhbHVhdGlvbkNvbXBsZXRlZEgAEjsKBmZhaWxlZBgFIAEoCzIpLm1hY2hpbmV3cmlnaHQud29ya2VyLnYxLkV2YWx1YXRpb25GYWlsZWRIABJBCgljYW5jZWxsZWQYBiABKAsyLC5tYWNoaW5ld3JpZ2h0Lndvcmtlci52MS5FdmFsdWF0aW9uQ2FuY2VsbGVkSAASTQoVc3dlZXBfcG9pbnRfY29tcGxldGVkGAcgASgLMiwubWFjaGluZXdyaWdodC53b3JrZXIudjEuU3dlZXBQb2ludENvbXBsZXRlZEgAEkcKEnN3ZWVwX3BvaW50X2ZhaWxlZBgIIAEoCzIpLm1hY2hpbmV3cmlnaHQud29ya2VyLnYxLlN3ZWVwUG9pbnRGYWlsZWRIABJNChVzd2VlcF9wb2ludF9jYW5jZWxsZWQYCSABKAsyLC5tYWNoaW5ld3JpZ2h0Lndvcmtlci52MS5Td2VlcFBvaW50Q2FuY2VsbGVkSABCBwoFZXZlbnRiBnByb3RvMw");
 
 /**
  * @generated from message machinewright.worker.v1.Hello
@@ -149,6 +149,124 @@ export const ShutdownSchema: GenMessage<Shutdown> = /*@__PURE__*/
   messageDesc(file_machinewright_worker, 4);
 
 /**
+ * Sweep messages (RFD-19 M3, "Hardware function laboratory"): one
+ * `EvaluateSweepPoint` evaluates a single point of a 1D or 2D parameter
+ * sweep. Unlike `EvaluateProject`, results are addressed by
+ * (session_id, sweep_id, point_index) rather than a single generation, so
+ * they can be dispatched across a pool of worker processes and completed
+ * out of order.
+ *
+ * @generated from message machinewright.worker.v1.SweepCoordinate
+ */
+export type SweepCoordinate = Message<"machinewright.worker.v1.SweepCoordinate"> & {
+  /**
+   * @generated from field: string parameter_path = 1;
+   */
+  parameterPath: string;
+
+  /**
+   * @generated from field: double value = 2;
+   */
+  value: number;
+};
+
+/**
+ * Describes the message machinewright.worker.v1.SweepCoordinate.
+ * Use `create(SweepCoordinateSchema)` to create a new message.
+ */
+export const SweepCoordinateSchema: GenMessage<SweepCoordinate> = /*@__PURE__*/
+  messageDesc(file_machinewright_worker, 5);
+
+/**
+ * @generated from message machinewright.worker.v1.EvaluateSweepPoint
+ */
+export type EvaluateSweepPoint = Message<"machinewright.worker.v1.EvaluateSweepPoint"> & {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: uint64 sweep_id = 2;
+   */
+  sweepId: bigint;
+
+  /**
+   * @generated from field: uint32 point_index = 3;
+   */
+  pointIndex: number;
+
+  /**
+   * @generated from field: repeated machinewright.worker.v1.SweepCoordinate coordinates = 4;
+   */
+  coordinates: SweepCoordinate[];
+
+  /**
+   * @generated from field: string project_root = 5;
+   */
+  projectRoot: string;
+
+  /**
+   * @generated from field: string template_id = 6;
+   */
+  templateId: string;
+
+  /**
+   * @generated from field: string template_version = 7;
+   */
+  templateVersion: string;
+
+  /**
+   * @generated from field: bytes baseline_inputs_json = 8;
+   */
+  baselineInputsJson: Uint8Array;
+
+  /**
+   * @generated from field: string output_directory = 9;
+   */
+  outputDirectory: string;
+
+  /**
+   * @generated from field: repeated machinewright.worker.v1.SourceOverlay overlays = 10;
+   */
+  overlays: SourceOverlay[];
+
+  /**
+   * @generated from field: string environment_digest = 11;
+   */
+  environmentDigest: string;
+};
+
+/**
+ * Describes the message machinewright.worker.v1.EvaluateSweepPoint.
+ * Use `create(EvaluateSweepPointSchema)` to create a new message.
+ */
+export const EvaluateSweepPointSchema: GenMessage<EvaluateSweepPoint> = /*@__PURE__*/
+  messageDesc(file_machinewright_worker, 6);
+
+/**
+ * @generated from message machinewright.worker.v1.CancelSweep
+ */
+export type CancelSweep = Message<"machinewright.worker.v1.CancelSweep"> & {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: uint64 sweep_id = 2;
+   */
+  sweepId: bigint;
+};
+
+/**
+ * Describes the message machinewright.worker.v1.CancelSweep.
+ * Use `create(CancelSweepSchema)` to create a new message.
+ */
+export const CancelSweepSchema: GenMessage<CancelSweep> = /*@__PURE__*/
+  messageDesc(file_machinewright_worker, 7);
+
+/**
  * @generated from message machinewright.worker.v1.WorkerRequest
  */
 export type WorkerRequest = Message<"machinewright.worker.v1.WorkerRequest"> & {
@@ -179,6 +297,18 @@ export type WorkerRequest = Message<"machinewright.worker.v1.WorkerRequest"> & {
      */
     value: Shutdown;
     case: "shutdown";
+  } | {
+    /**
+     * @generated from field: machinewright.worker.v1.EvaluateSweepPoint evaluate_sweep_point = 5;
+     */
+    value: EvaluateSweepPoint;
+    case: "evaluateSweepPoint";
+  } | {
+    /**
+     * @generated from field: machinewright.worker.v1.CancelSweep cancel_sweep = 6;
+     */
+    value: CancelSweep;
+    case: "cancelSweep";
   } | { case: undefined; value?: undefined };
 };
 
@@ -187,7 +317,7 @@ export type WorkerRequest = Message<"machinewright.worker.v1.WorkerRequest"> & {
  * Use `create(WorkerRequestSchema)` to create a new message.
  */
 export const WorkerRequestSchema: GenMessage<WorkerRequest> = /*@__PURE__*/
-  messageDesc(file_machinewright_worker, 5);
+  messageDesc(file_machinewright_worker, 8);
 
 /**
  * @generated from message machinewright.worker.v1.CapabilityReport
@@ -234,7 +364,7 @@ export type CapabilityReport = Message<"machinewright.worker.v1.CapabilityReport
  * Use `create(CapabilityReportSchema)` to create a new message.
  */
 export const CapabilityReportSchema: GenMessage<CapabilityReport> = /*@__PURE__*/
-  messageDesc(file_machinewright_worker, 6);
+  messageDesc(file_machinewright_worker, 9);
 
 /**
  * @generated from message machinewright.worker.v1.EvaluationProgress
@@ -276,7 +406,7 @@ export type EvaluationProgress = Message<"machinewright.worker.v1.EvaluationProg
  * Use `create(EvaluationProgressSchema)` to create a new message.
  */
 export const EvaluationProgressSchema: GenMessage<EvaluationProgress> = /*@__PURE__*/
-  messageDesc(file_machinewright_worker, 7);
+  messageDesc(file_machinewright_worker, 10);
 
 /**
  * @generated from message machinewright.worker.v1.PartialDiagnostics
@@ -303,7 +433,7 @@ export type PartialDiagnostics = Message<"machinewright.worker.v1.PartialDiagnos
  * Use `create(PartialDiagnosticsSchema)` to create a new message.
  */
 export const PartialDiagnosticsSchema: GenMessage<PartialDiagnostics> = /*@__PURE__*/
-  messageDesc(file_machinewright_worker, 8);
+  messageDesc(file_machinewright_worker, 11);
 
 /**
  * @generated from message machinewright.worker.v1.SourceDigest
@@ -325,7 +455,7 @@ export type SourceDigest = Message<"machinewright.worker.v1.SourceDigest"> & {
  * Use `create(SourceDigestSchema)` to create a new message.
  */
 export const SourceDigestSchema: GenMessage<SourceDigest> = /*@__PURE__*/
-  messageDesc(file_machinewright_worker, 9);
+  messageDesc(file_machinewright_worker, 12);
 
 /**
  * @generated from message machinewright.worker.v1.EvaluationCompleted
@@ -374,7 +504,7 @@ export type EvaluationCompleted = Message<"machinewright.worker.v1.EvaluationCom
  * Use `create(EvaluationCompletedSchema)` to create a new message.
  */
 export const EvaluationCompletedSchema: GenMessage<EvaluationCompleted> = /*@__PURE__*/
-  messageDesc(file_machinewright_worker, 10);
+  messageDesc(file_machinewright_worker, 13);
 
 /**
  * @generated from message machinewright.worker.v1.EvaluationFailed
@@ -416,7 +546,7 @@ export type EvaluationFailed = Message<"machinewright.worker.v1.EvaluationFailed
  * Use `create(EvaluationFailedSchema)` to create a new message.
  */
 export const EvaluationFailedSchema: GenMessage<EvaluationFailed> = /*@__PURE__*/
-  messageDesc(file_machinewright_worker, 11);
+  messageDesc(file_machinewright_worker, 14);
 
 /**
  * @generated from message machinewright.worker.v1.EvaluationCancelled
@@ -438,7 +568,113 @@ export type EvaluationCancelled = Message<"machinewright.worker.v1.EvaluationCan
  * Use `create(EvaluationCancelledSchema)` to create a new message.
  */
 export const EvaluationCancelledSchema: GenMessage<EvaluationCancelled> = /*@__PURE__*/
-  messageDesc(file_machinewright_worker, 12);
+  messageDesc(file_machinewright_worker, 15);
+
+/**
+ * @generated from message machinewright.worker.v1.SweepPointCompleted
+ */
+export type SweepPointCompleted = Message<"machinewright.worker.v1.SweepPointCompleted"> & {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: uint64 sweep_id = 2;
+   */
+  sweepId: bigint;
+
+  /**
+   * @generated from field: uint32 point_index = 3;
+   */
+  pointIndex: number;
+
+  /**
+   * @generated from field: string snapshot_path = 4;
+   */
+  snapshotPath: string;
+
+  /**
+   * @generated from field: string graph_digest = 5;
+   */
+  graphDigest: string;
+
+  /**
+   * @generated from field: string artifact_manifest_digest = 6;
+   */
+  artifactManifestDigest: string;
+};
+
+/**
+ * Describes the message machinewright.worker.v1.SweepPointCompleted.
+ * Use `create(SweepPointCompletedSchema)` to create a new message.
+ */
+export const SweepPointCompletedSchema: GenMessage<SweepPointCompleted> = /*@__PURE__*/
+  messageDesc(file_machinewright_worker, 16);
+
+/**
+ * @generated from message machinewright.worker.v1.SweepPointFailed
+ */
+export type SweepPointFailed = Message<"machinewright.worker.v1.SweepPointFailed"> & {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: uint64 sweep_id = 2;
+   */
+  sweepId: bigint;
+
+  /**
+   * @generated from field: uint32 point_index = 3;
+   */
+  pointIndex: number;
+
+  /**
+   * @generated from field: string code = 4;
+   */
+  code: string;
+
+  /**
+   * @generated from field: string message = 5;
+   */
+  message: string;
+};
+
+/**
+ * Describes the message machinewright.worker.v1.SweepPointFailed.
+ * Use `create(SweepPointFailedSchema)` to create a new message.
+ */
+export const SweepPointFailedSchema: GenMessage<SweepPointFailed> = /*@__PURE__*/
+  messageDesc(file_machinewright_worker, 17);
+
+/**
+ * @generated from message machinewright.worker.v1.SweepPointCancelled
+ */
+export type SweepPointCancelled = Message<"machinewright.worker.v1.SweepPointCancelled"> & {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: uint64 sweep_id = 2;
+   */
+  sweepId: bigint;
+
+  /**
+   * @generated from field: uint32 point_index = 3;
+   */
+  pointIndex: number;
+};
+
+/**
+ * Describes the message machinewright.worker.v1.SweepPointCancelled.
+ * Use `create(SweepPointCancelledSchema)` to create a new message.
+ */
+export const SweepPointCancelledSchema: GenMessage<SweepPointCancelled> = /*@__PURE__*/
+  messageDesc(file_machinewright_worker, 18);
 
 /**
  * @generated from message machinewright.worker.v1.WorkerEvent
@@ -483,6 +719,24 @@ export type WorkerEvent = Message<"machinewright.worker.v1.WorkerEvent"> & {
      */
     value: EvaluationCancelled;
     case: "cancelled";
+  } | {
+    /**
+     * @generated from field: machinewright.worker.v1.SweepPointCompleted sweep_point_completed = 7;
+     */
+    value: SweepPointCompleted;
+    case: "sweepPointCompleted";
+  } | {
+    /**
+     * @generated from field: machinewright.worker.v1.SweepPointFailed sweep_point_failed = 8;
+     */
+    value: SweepPointFailed;
+    case: "sweepPointFailed";
+  } | {
+    /**
+     * @generated from field: machinewright.worker.v1.SweepPointCancelled sweep_point_cancelled = 9;
+     */
+    value: SweepPointCancelled;
+    case: "sweepPointCancelled";
   } | { case: undefined; value?: undefined };
 };
 
@@ -491,5 +745,5 @@ export type WorkerEvent = Message<"machinewright.worker.v1.WorkerEvent"> & {
  * Use `create(WorkerEventSchema)` to create a new message.
  */
 export const WorkerEventSchema: GenMessage<WorkerEvent> = /*@__PURE__*/
-  messageDesc(file_machinewright_worker, 13);
+  messageDesc(file_machinewright_worker, 19);
 

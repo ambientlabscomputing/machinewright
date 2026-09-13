@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from dataclasses import dataclass
 import hashlib
 import importlib
 from importlib.metadata import PackageNotFoundError, version
 import inspect
+import itertools
 import json
 from pathlib import Path
 import shutil
@@ -251,7 +253,9 @@ def _write_meshes(design: Any, destination: Path) -> tuple[MeshReference, ...]:
     references: list[MeshReference] = []
     for node_id, shape in sorted(design.geometries.items()):
         vertices, triangles = shape.tessellate(0.1, 0.1)
-        positions = [(float(vertex.x), float(vertex.y), float(vertex.z)) for vertex in vertices]
+        positions = [
+            (float(vertex.x), float(vertex.y), float(vertex.z)) for vertex in vertices
+        ]
         normals = _vertex_normals(positions, triangles)
         bounds = _mesh_bounds(positions)
         payload = bytearray(b"MWM2")
@@ -284,7 +288,9 @@ def _write_meshes(design: Any, destination: Path) -> tuple[MeshReference, ...]:
 def _load_callable(dotted: str) -> Any:
     module_name, separator, attribute_path = dotted.partition(":")
     if not separator:
-        raise ValueError(f"template callable must use module:attribute syntax: {dotted}")
+        raise ValueError(
+            f"template callable must use module:attribute syntax: {dotted}"
+        )
     value: Any = importlib.import_module(module_name)
     for attribute in attribute_path.split("."):
         value = getattr(value, attribute)
@@ -301,7 +307,9 @@ def load_declared_templates(root: Path, config: ProjectConfig) -> None:
         value = _load_callable(entry.callable)
         declared = getattr(value, "__machinewright_template__", None)
         if declared is None:
-            raise ValueError(f"{entry.callable} is not decorated with @machine_template")
+            raise ValueError(
+                f"{entry.callable} is not decorated with @machine_template"
+            )
         if (declared.template_id, declared.version) != (entry.id, entry.version):
             raise ValueError(f"metadata mismatch for template {entry.callable}")
 
@@ -376,7 +384,12 @@ def evaluate_project(
     source_files = list(root.rglob("*.py")) + [root / "machinewright.toml"]
     project_source_digest = _tree_digest(source_files, root)
     environment_digest = _file_digest(root / config.environment_lock)
-    asset_files = [item for pattern in config.assets for item in root.glob(pattern) if item.is_file()]
+    asset_files = [
+        item
+        for pattern in config.assets
+        for item in root.glob(pattern)
+        if item.is_file()
+    ]
     asset_digest = _tree_digest(asset_files, root)
     cache_key = content_digest(
         {
@@ -403,11 +416,15 @@ def evaluate_project(
         progress=progress,
         cancellation=cancellation,
     ).artifacts
-    manifest = next(item for item in artifacts if item.kind == ExportFormat.MANIFEST_JSON)
+    manifest = next(
+        item for item in artifacts if item.kind == ExportFormat.MANIFEST_JSON
+    )
     mappings = _source_mappings(template, result.design, root)
     template_span = _source_span(template.function, root)
     template_source_digest = (
-        template_span.source_digest if template_span is not None else project_source_digest
+        template_span.source_digest
+        if template_span is not None
+        else project_source_digest
     )
     dependencies = (
         DependencyRecord(
@@ -453,6 +470,163 @@ def evaluate_project(
     if template.cacheable and cache is not None:
         cache.store(cache_key, output_directory, outcome)
     return outcome
+
+
+@dataclass(frozen=True)
+class SweepCoordinate:
+    """One axis value of a sweep point: a dotted input path and its value."""
+
+    parameter_path: str
+    value: float
+
+
+@dataclass(frozen=True)
+class SweepPoint:
+    """One evaluation point in a 1D or 2D sweep, addressed by `index`."""
+
+    index: int
+    coordinates: tuple[SweepCoordinate, ...]
+
+
+def linear_sweep_points(
+    parameter: str, start: float, stop: float, points: int
+) -> tuple[SweepPoint, ...]:
+    """The 1D sweep semantics of the reference `project sweep` CLI, factored out for reuse."""
+    if points < 2:
+        raise ValueError("points must be at least 2")
+    return tuple(
+        SweepPoint(
+            index=index,
+            coordinates=(
+                SweepCoordinate(
+                    parameter, start + (stop - start) * index / (points - 1)
+                ),
+            ),
+        )
+        for index in range(points)
+    )
+
+
+def grid_sweep_points(
+    axes: Sequence[tuple[str, float, float, int]],
+) -> tuple[SweepPoint, ...]:
+    """A 2D (or N-D) sweep as the full cartesian product of independently linear axes.
+
+    `axes` is a sequence of `(parameter_path, start, stop, points)`. Point
+    indices are assigned in row-major order over the axes as given, so the
+    last axis varies fastest — matching how the CLI writes `point-XXXX`
+    directories in a stable, deterministic order.
+    """
+    if len(axes) < 1:
+        raise ValueError("at least one sweep axis is required")
+    axis_values: list[list[SweepCoordinate]] = []
+    for parameter, start, stop, count in axes:
+        if count < 2:
+            raise ValueError("points must be at least 2")
+        axis_values.append(
+            [
+                SweepCoordinate(parameter, start + (stop - start) * index / (count - 1))
+                for index in range(count)
+            ]
+        )
+    return tuple(
+        SweepPoint(index=index, coordinates=tuple(combination))
+        for index, combination in enumerate(itertools.product(*axis_values))
+    )
+
+
+def apply_sweep_coordinates(
+    baseline_inputs: Mapping[str, Any], coordinates: Sequence[SweepCoordinate]
+) -> dict[str, Any]:
+    """Applies each coordinate's dotted `parameter_path` onto a copy of `baseline_inputs`."""
+    point_inputs: dict[str, Any] = json.loads(json.dumps(baseline_inputs))
+    for coordinate in coordinates:
+        target = point_inputs
+        segments = coordinate.parameter_path.split(".")
+        for segment in segments[:-1]:
+            child = target.setdefault(segment, {})
+            if not isinstance(child, dict):
+                raise ValueError(
+                    f"{coordinate.parameter_path} does not address an object field"
+                )
+            target = child
+        target[segments[-1]] = coordinate.value
+    return point_inputs
+
+
+def evaluate_sweep_point(
+    project_root: Path,
+    template_id: str,
+    template_version: str,
+    baseline_inputs: Mapping[str, Any],
+    point: SweepPoint,
+    output_directory: Path,
+    *,
+    cancellation: CancellationToken | None = None,
+    progress: Callable[[Any], None] | None = None,
+    cache: EvaluationCache | None = None,
+) -> EvaluationOutcome:
+    """Evaluates one sweep point, writing its snapshot under `output_directory/point-XXXX`.
+
+    Each point gets its own generation (`point.index + 1`), matching the
+    existing `project sweep` CLI so per-point snapshots stay independently
+    loadable — RFD-19 M3's "load graph and geometry snapshots for selected
+    evaluation points."
+    """
+    point_inputs = apply_sweep_coordinates(baseline_inputs, point.coordinates)
+    point_dir = output_directory / f"point-{point.index:04d}"
+    return evaluate_project(
+        project_root,
+        template_id,
+        template_version,
+        point_inputs,
+        point_dir,
+        generation=point.index + 1,
+        cancellation=cancellation,
+        progress=progress,
+        cache=cache,
+    )
+
+
+def evaluate_sweep(
+    project_root: Path,
+    template_id: str,
+    template_version: str,
+    baseline_inputs: Mapping[str, Any],
+    points: Sequence[SweepPoint],
+    output_directory: Path,
+    *,
+    cancellation: CancellationToken | None = None,
+    progress: Callable[[Any], None] | None = None,
+    cache: EvaluationCache | None = None,
+) -> Iterator[tuple[SweepPoint, EvaluationOutcome | Exception]]:
+    """Evaluates `points` in order, yielding `(point, outcome_or_error)` as each completes.
+
+    Cancellation is checked *between* points, not inside one: a single
+    point's own `template.evaluate()` call is not preemptible today (only
+    `export_artifacts()` observes the token), so a cancelled sweep stops
+    scheduling further points rather than aborting whichever point is
+    in-flight. This matches the advisory (non-synchronous) cancellation
+    model the worker protocol already uses for single evaluations.
+    """
+    for point in points:
+        if cancellation is not None and cancellation.cancelled:
+            return
+        try:
+            outcome = evaluate_sweep_point(
+                project_root,
+                template_id,
+                template_version,
+                baseline_inputs,
+                point,
+                output_directory,
+                cancellation=cancellation,
+                progress=progress,
+                cache=cache,
+            )
+            yield point, outcome
+        except Exception as error:  # noqa: BLE001 - reported to the caller, not swallowed
+            yield point, error
 
 
 def _machinewright_version() -> str:

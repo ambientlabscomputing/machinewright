@@ -62,14 +62,43 @@ export class SnapshotInstaller {
     const raw = await this.loadEvaluationSnapshot(result.snapshotPath);
     const manifest: ArtifactManifest = { artifactManifestDigest: result.artifactManifestDigest, meshes: raw.meshes ?? [] };
     const meshes = await this.cacheClient.resolveMeshRefs(outputDirectory, manifest);
+    this.stagePrepared(result.generation, raw, meshes, result.artifactManifestDigest);
+  }
+
+  /**
+   * Same prepare/ready/commit handshake as `stage()`, but for an already
+   * loaded/resolved snapshot under a caller-supplied `generation` rather
+   * than one freshly read from `snapshotPath`.
+   *
+   * Used by `SweepSnapshotCache` to view a cached sweep point: it loads and
+   * resolves each point's meshes once, up front, then calls this repeatedly
+   * (under a fresh, ever-increasing "view generation" it owns) as the user
+   * scrubs between already-cached points. A fresh view generation on every
+   * call — never the point's own compute-time generation — matters because
+   * `SnapshotStore`'s accepted-generation pointer is strictly monotonic;
+   * reusing compute-time generations would make `install()` silently reject
+   * scrubbing back to an earlier point.
+   */
+  stagePreloaded(
+    generation: bigint,
+    raw: EvaluationSnapshot,
+    meshes: readonly { graphNodeId: string; digest: string; url: string }[],
+    artifactManifestDigest: string,
+  ): void {
+    this.snapshotStore.setPending(generation);
+    this.stagePrepared(generation, raw, meshes, artifactManifestDigest);
+  }
+
+  private stagePrepared(
+    generation: bigint,
+    raw: EvaluationSnapshot,
+    meshes: readonly { graphNodeId: string; digest: string; url: string }[],
+    artifactManifestDigest: string,
+  ): void {
     // Stash raw/meshes for use once "prepared" arrives.
-    this.pendingRaw.set(result.generation, raw);
-    this.pendingMeshes.set(result.generation, meshes);
-    this.viewport.prepareSnapshot({
-      generation: result.generation,
-      artifactManifestDigest: result.artifactManifestDigest,
-      meshes,
-    });
+    this.pendingRaw.set(generation, raw);
+    this.pendingMeshes.set(generation, meshes);
+    this.viewport.prepareSnapshot({ generation, artifactManifestDigest, meshes });
   }
 
   dispose(): void {

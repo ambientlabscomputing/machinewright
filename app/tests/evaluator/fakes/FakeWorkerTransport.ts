@@ -119,4 +119,59 @@ export class FakeWorkerTransport implements WorkerTransport {
       },
     });
   }
+
+  /** Sweep-point equivalents of the single-evaluation `emit*` helpers above, for SweepCoordinator tests. */
+  emitSweepPointCompleted(
+    sweepId: bigint,
+    pointIndex: number,
+    overrides: Partial<{ snapshotPath: string; graphDigest: string; artifactManifestDigest: string }> = {},
+  ): void {
+    this.emitEvent({
+      $typeName: "machinewright.worker.v1.WorkerEvent",
+      event: {
+        case: "sweepPointCompleted",
+        value: {
+          $typeName: "machinewright.worker.v1.SweepPointCompleted",
+          sessionId: "machinewright-app-sweep",
+          sweepId,
+          pointIndex,
+          snapshotPath: overrides.snapshotPath ?? `/tmp/sweep-${sweepId}-point-${pointIndex}.json`,
+          graphDigest: overrides.graphDigest ?? `graph-${pointIndex}`,
+          artifactManifestDigest: overrides.artifactManifestDigest ?? `manifest-${pointIndex}`,
+        },
+      },
+    });
+  }
+
+  emitSweepPointFailed(sweepId: bigint, pointIndex: number, message = "sweep point failed"): void {
+    this.emitEvent({
+      $typeName: "machinewright.worker.v1.WorkerEvent",
+      event: {
+        case: "sweepPointFailed",
+        value: {
+          $typeName: "machinewright.worker.v1.SweepPointFailed",
+          sessionId: "machinewright-app-sweep",
+          sweepId,
+          pointIndex,
+          code: "sweep_point.failed",
+          message,
+        },
+      },
+    });
+  }
+
+  emitSweepPointCancelled(sweepId: bigint, pointIndex: number): void {
+    this.emitEvent({
+      $typeName: "machinewright.worker.v1.WorkerEvent",
+      event: {
+        case: "sweepPointCancelled",
+        value: {
+          $typeName: "machinewright.worker.v1.SweepPointCancelled",
+          sessionId: "machinewright-app-sweep",
+          sweepId,
+          pointIndex,
+        },
+      },
+    });
+  }
 }

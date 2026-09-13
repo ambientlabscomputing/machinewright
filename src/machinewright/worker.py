@@ -17,7 +17,12 @@ from typing import BinaryIO
 
 from machinewright.canonical import canonical_json
 from machinewright.diagnostics import MachinewrightError
-from machinewright.evaluation import evaluate_project
+from machinewright.evaluation import (
+    SweepCoordinate,
+    SweepPoint,
+    evaluate_project,
+    evaluate_sweep_point,
+)
 from machinewright.export_service import CancellationToken, ExportProgress
 from machinewright.project import load_project
 from machinewright.protocol import machinewright_worker_pb2 as protocol
@@ -31,6 +36,7 @@ CAPABILITIES = (
     "progress.v1",
     "cancellation.v1",
     "content_addressed_meshes.v1",
+    "sweep_evaluation.v1",
 )
 
 
@@ -41,11 +47,17 @@ def _package_version(name: str) -> str:
         return "unknown"
 
 
-def _verify_environment(request: protocol.EvaluateProject) -> None:
+_MaterializableRequest = protocol.EvaluateProject | protocol.EvaluateSweepPoint
+
+
+def _verify_environment(request: _MaterializableRequest) -> None:
     if not request.environment_digest:
         return
     root, config = load_project(Path(request.project_root))
-    actual = "sha256:" + hashlib.sha256((root / config.environment_lock).read_bytes()).hexdigest()
+    actual = (
+        "sha256:"
+        + hashlib.sha256((root / config.environment_lock).read_bytes()).hexdigest()
+    )
     if actual != request.environment_digest:
         raise RuntimeError(
             "environment lock changed after evaluation was requested: "
@@ -91,7 +103,7 @@ class EventWriter:
             self.stream.flush()
 
 
-def _materialize_overlay(request: protocol.EvaluateProject) -> tuple[Path, Path | None]:
+def _materialize_overlay(request: _MaterializableRequest) -> tuple[Path, Path | None]:
     root = Path(request.project_root).resolve()
     if not request.overlays:
         return root, None
@@ -163,6 +175,14 @@ class Worker:
         self.writer = writer
         self.cancellations: dict[tuple[str, int], CancellationToken] = {}
         self.cancelled_before_start: set[tuple[str, int]] = set()
+        # Sweep points are keyed by (session_id, sweep_id, point_index) since a
+        # sweep spans many points rather than one generation. `CancelSweep`
+        # only carries (session_id, sweep_id) — it cancels whichever point of
+        # that sweep is currently in flight on this worker and marks the
+        # sweep so any point dispatched to this worker afterwards is
+        # cancelled immediately too, mirroring `cancelled_before_start` above.
+        self.sweep_cancellations: dict[tuple[str, int, int], CancellationToken] = {}
+        self.cancelled_sweeps: set[tuple[str, int]] = set()
         self.lock = threading.Lock()
         # The project root actually materialized (and imported from) by the
         # previous evaluation, so the next call can evict its modules/sys.path
@@ -193,7 +213,108 @@ class Worker:
             else:
                 token.cancel()
 
-    def _evaluate(self, request: protocol.EvaluateProject, token: CancellationToken) -> None:
+    def evaluate_sweep_point(self, request: protocol.EvaluateSweepPoint) -> None:
+        token = CancellationToken()
+        sweep_key = (request.session_id, request.sweep_id)
+        point_key = (request.session_id, request.sweep_id, request.point_index)
+        with self.lock:
+            self.sweep_cancellations[point_key] = token
+            if sweep_key in self.cancelled_sweeps:
+                token.cancel()
+        # Same constraint as `evaluate()`: CAD evaluation must stay on this
+        # process's main thread.
+        self._evaluate_sweep_point(request, token)
+
+    def cancel_sweep(self, request: protocol.CancelSweep) -> None:
+        sweep_key = (request.session_id, request.sweep_id)
+        with self.lock:
+            self.cancelled_sweeps.add(sweep_key)
+            for key, token in self.sweep_cancellations.items():
+                if key[0] == request.session_id and key[1] == request.sweep_id:
+                    token.cancel()
+
+    def _evaluate_sweep_point(
+        self, request: protocol.EvaluateSweepPoint, token: CancellationToken
+    ) -> None:
+        temporary: Path | None = None
+        project_root: Path | None = None
+        session_id = request.session_id
+        sweep_id = request.sweep_id
+        point_index = request.point_index
+        point_key = (session_id, sweep_id, point_index)
+        try:
+            _verify_environment(request)
+            if self._last_project_root is not None:
+                _clear_modules(self._last_project_root)
+            project_root, temporary = _materialize_overlay(request)
+            baseline_inputs = json.loads(request.baseline_inputs_json)
+            point = SweepPoint(
+                index=request.point_index,
+                coordinates=tuple(
+                    SweepCoordinate(coordinate.parameter_path, coordinate.value)
+                    for coordinate in request.coordinates
+                ),
+            )
+            outcome = evaluate_sweep_point(
+                project_root,
+                request.template_id,
+                request.template_version,
+                baseline_inputs,
+                point,
+                Path(request.output_directory),
+                cancellation=token,
+            )
+            if token.cancelled:
+                self.writer.write(
+                    protocol.WorkerEvent(
+                        sweep_point_cancelled=protocol.SweepPointCancelled(
+                            session_id=session_id, sweep_id=sweep_id, point_index=point_index
+                        )
+                    )
+                )
+            else:
+                self.writer.write(
+                    protocol.WorkerEvent(
+                        sweep_point_completed=protocol.SweepPointCompleted(
+                            session_id=session_id,
+                            sweep_id=sweep_id,
+                            point_index=point_index,
+                            snapshot_path=outcome.snapshot_path,
+                            graph_digest=outcome.snapshot.graph_digest,
+                            artifact_manifest_digest=outcome.snapshot.artifact_manifest_digest,
+                        )
+                    )
+                )
+        except Exception as error:
+            event = protocol.WorkerEvent()
+            if token.cancelled:
+                event.sweep_point_cancelled.CopyFrom(
+                    protocol.SweepPointCancelled(
+                        session_id=session_id, sweep_id=sweep_id, point_index=point_index
+                    )
+                )
+            else:
+                event.sweep_point_failed.CopyFrom(
+                    protocol.SweepPointFailed(
+                        session_id=session_id,
+                        sweep_id=sweep_id,
+                        point_index=point_index,
+                        code="sweep_point.failed",
+                        message=str(error),
+                    )
+                )
+            self.writer.write(event)
+        finally:
+            with self.lock:
+                self.sweep_cancellations.pop(point_key, None)
+            if project_root is not None:
+                self._last_project_root = project_root
+            if temporary is not None:
+                shutil.rmtree(temporary, ignore_errors=True)
+
+    def _evaluate(
+        self, request: protocol.EvaluateProject, token: CancellationToken
+    ) -> None:
         temporary: Path | None = None
         project_root: Path | None = None
         key = (request.session_id, request.generation)
@@ -287,6 +408,8 @@ class Worker:
         with self.lock:
             for token in self.cancellations.values():
                 token.cancel()
+            for token in self.sweep_cancellations.values():
+                token.cancel()
 
 
 def main() -> None:  # noqa: C901 - protocol dispatch loop
@@ -308,12 +431,18 @@ def main() -> None:  # noqa: C901 - protocol dispatch loop
                 commands.put(("evaluate", request.evaluate))
             elif kind == "cancel":
                 worker.cancel(request.cancel)
+            elif kind == "evaluate_sweep_point":
+                commands.put(("evaluate_sweep_point", request.evaluate_sweep_point))
+            elif kind == "cancel_sweep":
+                worker.cancel_sweep(request.cancel_sweep)
             elif kind == "shutdown":
                 commands.put(("shutdown", None))
                 return
         commands.put(("shutdown", None))
 
-    reader = threading.Thread(target=read_commands, name="machinewright-protocol", daemon=True)
+    reader = threading.Thread(
+        target=read_commands, name="machinewright-protocol", daemon=True
+    )
     reader.start()
     try:
         while True:
@@ -351,6 +480,12 @@ def main() -> None:  # noqa: C901 - protocol dispatch loop
                 evaluate = value
                 assert isinstance(evaluate, protocol.EvaluateProject)
                 worker.evaluate(evaluate)
+            elif kind == "evaluate_sweep_point":
+                evaluate_sweep_point_request = value
+                assert isinstance(
+                    evaluate_sweep_point_request, protocol.EvaluateSweepPoint
+                )
+                worker.evaluate_sweep_point(evaluate_sweep_point_request)
             elif kind == "shutdown":
                 break
     finally:

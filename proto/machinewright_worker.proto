@@ -31,12 +31,44 @@ message CancelEvaluation {
 
 message Shutdown {}
 
+// Sweep messages (RFD-19 M3, "Hardware function laboratory"): one
+// `EvaluateSweepPoint` evaluates a single point of a 1D or 2D parameter
+// sweep. Unlike `EvaluateProject`, results are addressed by
+// (session_id, sweep_id, point_index) rather than a single generation, so
+// they can be dispatched across a pool of worker processes and completed
+// out of order.
+message SweepCoordinate {
+  string parameter_path = 1;
+  double value = 2;
+}
+
+message EvaluateSweepPoint {
+  string session_id = 1;
+  uint64 sweep_id = 2;
+  uint32 point_index = 3;
+  repeated SweepCoordinate coordinates = 4;
+  string project_root = 5;
+  string template_id = 6;
+  string template_version = 7;
+  bytes baseline_inputs_json = 8;
+  string output_directory = 9;
+  repeated SourceOverlay overlays = 10;
+  string environment_digest = 11;
+}
+
+message CancelSweep {
+  string session_id = 1;
+  uint64 sweep_id = 2;
+}
+
 message WorkerRequest {
   oneof request {
     Hello hello = 1;
     EvaluateProject evaluate = 2;
     CancelEvaluation cancel = 3;
     Shutdown shutdown = 4;
+    EvaluateSweepPoint evaluate_sweep_point = 5;
+    CancelSweep cancel_sweep = 6;
   }
 }
 
@@ -99,6 +131,29 @@ message EvaluationCancelled {
   uint64 generation = 2;
 }
 
+message SweepPointCompleted {
+  string session_id = 1;
+  uint64 sweep_id = 2;
+  uint32 point_index = 3;
+  string snapshot_path = 4;
+  string graph_digest = 5;
+  string artifact_manifest_digest = 6;
+}
+
+message SweepPointFailed {
+  string session_id = 1;
+  uint64 sweep_id = 2;
+  uint32 point_index = 3;
+  string code = 4;
+  string message = 5;
+}
+
+message SweepPointCancelled {
+  string session_id = 1;
+  uint64 sweep_id = 2;
+  uint32 point_index = 3;
+}
+
 message WorkerEvent {
   oneof event {
     CapabilityReport capabilities = 1;
@@ -107,5 +162,8 @@ message WorkerEvent {
     EvaluationCompleted completed = 4;
     EvaluationFailed failed = 5;
     EvaluationCancelled cancelled = 6;
+    SweepPointCompleted sweep_point_completed = 7;
+    SweepPointFailed sweep_point_failed = 8;
+    SweepPointCancelled sweep_point_cancelled = 9;
   }
 }

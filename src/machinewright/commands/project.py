@@ -14,7 +14,11 @@ import typer
 from machinewright.canonical import canonical_json, content_digest
 from machinewright.evaluation import (
     EvaluationCache,
+    SweepPoint,
     evaluate_project,
+    evaluate_sweep,
+    grid_sweep_points,
+    linear_sweep_points,
     load_declared_templates,
 )
 from machinewright.project import load_project
@@ -50,7 +54,9 @@ def schema(
     load_declared_templates(project_root, config)
     payload = get_machine_template(template_id, template_version).input_schema()
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    output.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     typer.echo(str(output))
 
 
@@ -74,6 +80,27 @@ def evaluate(
     typer.echo(canonical_json(outcome))
 
 
+def _point_result(
+    point: SweepPoint, outcome_or_error: Any, output: Path
+) -> dict[str, Any]:
+    if isinstance(outcome_or_error, Exception):
+        return {
+            "index": point.index,
+            "status": "failed",
+            "error": str(outcome_or_error),
+        }
+    outcome = outcome_or_error
+    return {
+        "index": point.index,
+        "status": "succeeded",
+        "snapshot": Path(outcome.snapshot_path).relative_to(output).as_posix(),
+        "graph_digest": outcome.snapshot.graph_digest,
+        "observables": [
+            item.model_dump(mode="json") for item in outcome.snapshot.observables
+        ],
+    }
+
+
 @project.command("sweep")
 def sweep(
     template_id: str,
@@ -86,49 +113,72 @@ def sweep(
     output: Path,
     root: Path = Path("."),
 ) -> None:
+    """Evaluate a 1D sweep over one dotted input parameter.
+
+    This is the reference sweep semantics RFD-19 M3's native application
+    mirrors when building sweep points, and stays runnable headlessly for CI
+    reproducibility (hard requirement #10).
+    """
     if points < 2:
         raise typer.BadParameter("points must be at least 2")
     baseline = _inputs(inputs)
+    sweep_points = linear_sweep_points(parameter, start, stop, points)
     results: list[dict[str, Any]] = []
-    for index in range(points):
-        value = start + (stop - start) * index / (points - 1)
-        point_inputs = dict(baseline)
-        target = point_inputs
-        segments = parameter.split(".")
-        for segment in segments[:-1]:
-            child = target.setdefault(segment, {})
-            if not isinstance(child, dict):
-                raise typer.BadParameter(f"{parameter} does not address an object field")
-            target = child
-        target[segments[-1]] = value
-        point_dir = output / f"point-{index:04d}"
-        try:
-            outcome = evaluate_project(
-                root,
-                template_id,
-                template_version,
-                point_inputs,
-                point_dir,
-                generation=index + 1,
-            )
-            results.append(
-                {
-                    "index": index,
-                    "value": value,
-                    "status": "succeeded",
-                    "snapshot": Path(outcome.snapshot_path).relative_to(output).as_posix(),
-                    "graph_digest": outcome.snapshot.graph_digest,
-                    "observables": [
-                        item.model_dump(mode="json") for item in outcome.snapshot.observables
-                    ],
-                }
-            )
-        except Exception as error:
-            results.append(
-                {"index": index, "value": value, "status": "failed", "error": str(error)}
-            )
+    for point, outcome_or_error in evaluate_sweep(
+        root, template_id, template_version, baseline, sweep_points, output
+    ):
+        result = _point_result(point, outcome_or_error, output)
+        result["value"] = point.coordinates[0].value
+        results.append(result)
     output.mkdir(parents=True, exist_ok=True)
     summary = {"parameter": parameter, "points": results}
+    summary_path = output / "sweep.json"
+    summary_path.write_text(canonical_json(summary) + "\n", encoding="utf-8")
+    typer.echo(str(summary_path))
+
+
+@project.command("sweep2d")
+def sweep2d(
+    template_id: str,
+    template_version: str,
+    inputs: Path,
+    parameter1: str,
+    start1: float,
+    stop1: float,
+    points1: int,
+    parameter2: str,
+    start2: float,
+    stop2: float,
+    points2: int,
+    output: Path,
+    root: Path = Path("."),
+) -> None:
+    """Evaluate a 2D grid sweep over two dotted input parameters.
+
+    Shares `evaluate_sweep`'s point-by-point semantics with `sweep`; the grid
+    is the cartesian product of both axes, with `parameter2` varying fastest.
+    """
+    if points1 < 2 or points2 < 2:
+        raise typer.BadParameter("points must be at least 2")
+    baseline = _inputs(inputs)
+    sweep_points = grid_sweep_points(
+        [
+            (parameter1, start1, stop1, points1),
+            (parameter2, start2, stop2, points2),
+        ]
+    )
+    results: list[dict[str, Any]] = []
+    for point, outcome_or_error in evaluate_sweep(
+        root, template_id, template_version, baseline, sweep_points, output
+    ):
+        result = _point_result(point, outcome_or_error, output)
+        result["coordinates"] = {
+            coordinate.parameter_path: coordinate.value
+            for coordinate in point.coordinates
+        }
+        results.append(result)
+    output.mkdir(parents=True, exist_ok=True)
+    summary = {"parameters": [parameter1, parameter2], "points": results}
     summary_path = output / "sweep.json"
     summary_path.write_text(canonical_json(summary) + "\n", encoding="utf-8")
     typer.echo(str(summary_path))
@@ -155,8 +205,13 @@ def _verify_goldens(root: Path) -> None:
                 base / "b",
             )
             if first.snapshot.graph_digest != second.snapshot.graph_digest:
-                raise RuntimeError(f"golden {golden.name} produced different graph digests")
-            if first.snapshot.artifact_manifest_digest != second.snapshot.artifact_manifest_digest:
+                raise RuntimeError(
+                    f"golden {golden.name} produced different graph digests"
+                )
+            if (
+                first.snapshot.artifact_manifest_digest
+                != second.snapshot.artifact_manifest_digest
+            ):
                 raise RuntimeError(
                     f"golden {golden.name} produced different manifest digests"
                 )
