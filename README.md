@@ -24,11 +24,10 @@ width input in `inputs.json`. Change the width and evaluate again to see both
 plates grow. Open the generated folder in the macOS app to edit the source
 and inspect the design.
 
-The generated project uses the installed Machinewright version. When the CLI
-is installed directly from a checkout, wheel, or Git commit, the project
-uses that same source. A local checkout or wheel must remain available while
-the project uses it. The command creates a new directory and refuses an
-existing destination. Use `--output-dir` to choose the parent directory.
+The generated project pins Machinewright to the Git release tag for the
+version in Machinewright's `pyproject.toml`, with a `v` prefix. The command
+creates a new directory and refuses an existing destination. Use
+`--output-dir` to choose the parent directory.
 From a Machinewright checkout, run
 `uv run machinewright project init indexing-table --output-dir ..` to create
 a sibling project.

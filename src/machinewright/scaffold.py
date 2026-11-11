@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from importlib.metadata import distribution
+from importlib.metadata import version
 import json
 from pathlib import Path
 import re
@@ -13,15 +13,9 @@ STARTERS = ("basic",)
 
 
 def _machinewright_requirement() -> str:
-    installed = distribution("machinewright")
-    direct_url = json.loads(installed.read_text("direct_url.json") or "{}")
-    if not direct_url:
-        return f"machinewright=={installed.version}"
-
-    url = direct_url["url"]
-    if vcs := direct_url.get("vcs_info"):
-        url = f"{vcs['vcs']}+{url}@{vcs['commit_id']}"
-    return f"machinewright @ {url}"
+    # Wheel metadata normalizes 0.1.0-rc.8 to 0.1.0rc8.
+    tag_version = re.sub(r"rc(\d+)$", r"-rc.\1", version("machinewright"))
+    return f"machinewright @ git+https://github.com/ambientlabscomputing/machinewright.git@v{tag_version}"
 
 
 def create_project(name: str, output_dir: Path, starter: str) -> Path:
