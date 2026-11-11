@@ -8,6 +8,31 @@ canonical `ResolvedHardwareGraph`.
 
 CadQuery remains the leaf-geometry engine. It is not the assembly model.
 
+## Start a new design
+
+With Machinewright and uv installed, run:
+
+```bash
+machinewright project init indexing-table --starter basic
+cd indexing-table
+uv sync
+uv run machinewright project evaluate indexing-table.main 0.1.0 inputs.json artifacts/
+```
+
+The bundled starter creates two positioned plates in `design.py` and a typed
+width input in `inputs.json`. Change the width and evaluate again to see both
+plates grow. Open the generated folder in the macOS app to edit the source
+and inspect the design.
+
+The generated project uses the installed Machinewright version. When the CLI
+is installed directly from a checkout, wheel, or Git commit, the project
+uses that same source. A local checkout or wheel must remain available while
+the project uses it. The command creates a new directory and refuses an
+existing destination. Use `--output-dir` to choose the parent directory.
+From a Machinewright checkout, run
+`uv run machinewright project init indexing-table --output-dir ..` to create
+a sibling project.
+
 ## Authoring parts
 
 Parts subclass `PartDefinition`. Constructor attributes are canonical design

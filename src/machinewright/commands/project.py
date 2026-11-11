@@ -22,6 +22,7 @@ from machinewright.evaluation import (
     load_declared_templates,
 )
 from machinewright.project import load_project
+from machinewright.scaffold import create_project
 from machinewright.templates import get_machine_template
 
 project = typer.Typer()
@@ -32,6 +33,21 @@ def _inputs(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("template inputs must be a JSON object")
     return payload
+
+
+@project.command("init")
+def init(
+    name: str,
+    starter: str = "basic",
+    output_dir: Path = Path("."),
+) -> None:
+    """Create a new machine design from a bundled starter."""
+    try:
+        destination = create_project(name, output_dir, starter)
+    except (ValueError, OSError) as error:
+        raise typer.BadParameter(str(error)) from error
+    typer.echo(f"Created {destination}")
+    typer.echo("Run uv sync in the new project, then follow its README to evaluate it.")
 
 
 @project.command("validate")

@@ -1,0 +1,8 @@
+project_id = "{{ cookiecutter.project_slug }}"
+environment_lock = "uv.lock"
+input_configurations = ["inputs.json"]
+
+[[templates]]
+id = "{{ cookiecutter.project_slug }}.main"
+version = "0.1.0"
+callable = "design:machine"
