@@ -125,6 +125,7 @@ class MachinewrightAssetsModule: NSObject {
     do {
       try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
       let tempURL = directory.appendingPathComponent(".\(targetURL.lastPathComponent).tmp-\(UUID().uuidString)")
+      defer { try? FileManager.default.removeItem(at: tempURL) }
       try contents.write(to: tempURL, atomically: false, encoding: .utf8)
       if FileManager.default.fileExists(atPath: targetURL.path) {
         _ = try FileManager.default.replaceItemAt(targetURL, withItemAt: tempURL)

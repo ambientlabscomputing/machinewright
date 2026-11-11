@@ -50,6 +50,50 @@ def test_direct_evaluation_is_portable_and_maps_source(tmp_path: Path):
     assert all("path" not in item for item in payload["artifacts"])
 
 
+def test_viewport_mesh_bounds_reflect_each_nodes_world_transform(tmp_path: Path):
+    """Regression: `_write_meshes` must place each part at its node transform
+    before tessellating, the same way the authoritative STEP/STL export
+    already does via `.located(...)`. Before this fix, three `DowelPin`
+    instances sharing identical local geometry but distinct z-translations
+    (20/30/40mm) all tessellated at their local, untransformed origin and
+    rendered coincident in the application's three.js viewport instead of
+    stacked -- invisible to graph/artifact digest checks, which never
+    depend on the interactive mesh preview, only to someone looking at the
+    actual viewport.
+    """
+    outcome = evaluate_project(
+        ROOT,
+        "machinewright.reference.simple",
+        "1.0.0",
+        INPUTS,
+        tmp_path,
+        request=REQUEST,
+    )
+    meshes_by_node = {mesh.graph_node_id: mesh for mesh in outcome.snapshot.meshes}
+    pin_nodes = [
+        node
+        for node in outcome.snapshot.graph.nodes
+        if node.kind == "part" and "pin" in node.instance_key
+    ]
+    assert len(pin_nodes) >= 2
+    world_z_by_node = {
+        node.node_id: float(node.transform.translation_mm[2]) for node in pin_nodes
+    }
+    assert len({round(z) for z in world_z_by_node.values()}) == len(pin_nodes), (
+        "fixture assumption: pin nodes must have distinct world z-translations"
+    )
+    for node_id, world_z in world_z_by_node.items():
+        bounds = meshes_by_node[node_id].bounds
+        mesh_z_min, mesh_z_max = bounds[2], bounds[5]
+        assert mesh_z_min <= world_z <= mesh_z_max, (
+            f"{node_id} mesh bounds {bounds} do not contain its world z={world_z}"
+        )
+    bounds_by_node = {node_id: meshes_by_node[node_id].bounds for node_id in world_z_by_node}
+    assert len({bounds for bounds in bounds_by_node.values()}) == len(bounds_by_node), (
+        "distinct world transforms must not collapse onto identical mesh bounds"
+    )
+
+
 def test_cache_restores_serialized_results_and_artifacts(tmp_path: Path):
     cache = EvaluationCache(tmp_path / "cache")
     first = evaluate_project(
@@ -300,7 +344,7 @@ def test_project_sweep_cli_produces_one_feasibility_flip_and_loadable_per_point_
     # (feasible through payload_kg=48, infeasible from payload_kg=51). The
     # range starts above 0, not at it, since ReferenceInputs.payload_kg is
     # constrained to `gt=0`.
-    flips = sum(1 for before, after in zip(feasibility, feasibility[1:]) if before != after)
+    flips = sum(1 for before, after in zip(feasibility, feasibility[1:], strict=False) if before != after)
     assert flips == 1, feasibility
 
     for point in points:

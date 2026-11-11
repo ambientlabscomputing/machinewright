@@ -29,7 +29,7 @@ from machinewright.export_service import (
     ExportRequest,
     export_artifacts,
 )
-from machinewright.hardware_graph import ResolvedDesign, ResolvedHardwareGraph
+from machinewright.hardware_graph import PartNode, ResolvedDesign, ResolvedHardwareGraph
 from machinewright.project import ProjectConfig, load_project
 from machinewright.templates import (
     EvidenceRequirement,
@@ -247,12 +247,24 @@ def _mesh_bounds(
     )
 
 
-def _write_meshes(design: Any, destination: Path) -> tuple[MeshReference, ...]:
+def _write_meshes(design: ResolvedDesign, destination: Path) -> tuple[MeshReference, ...]:
     mesh_dir = destination / "meshes"
     mesh_dir.mkdir(parents=True, exist_ok=True)
     references: list[MeshReference] = []
+    # `design.geometries` holds each part's local/canonical shape; nodes at a
+    # non-identity transform must be placed in world space before tessellating,
+    # the same way `ResolvedDesign.cad(exploded=True)` does via `.located(...)`,
+    # or every part with the same local geometry renders coincident regardless
+    # of its actual position in the assembly.
+    transforms = {
+        node.node_id: node.transform
+        for node in design.graph.nodes
+        if isinstance(node, PartNode)
+    }
     for node_id, shape in sorted(design.geometries.items()):
-        vertices, triangles = shape.tessellate(0.1, 0.1)
+        transform = transforms.get(node_id)
+        located_shape = shape.located(transform.location()) if transform is not None else shape
+        vertices, triangles = located_shape.tessellate(0.1, 0.1)
         positions = [
             (float(vertex.x), float(vertex.y), float(vertex.z)) for vertex in vertices
         ]
@@ -394,6 +406,8 @@ def evaluate_project(
     cache_key = content_digest(
         {
             "template": [template_id, template_version],
+            # Revision 1 cached part-local meshes.
+            "viewport_mesh_revision": 2,
             "inputs": inputs,
             "project_source_digest": project_source_digest,
             "environment_digest": environment_digest,

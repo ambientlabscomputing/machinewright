@@ -19,7 +19,7 @@ import type { RefObject } from "react";
 import { ScrollView } from "react-native";
 import { Button, Panel, Resizable, Stack, StatusBadge, Text } from "../design-system/native";
 import { WorkerBridge } from "../native/WorkerBridge";
-import { readTextFile } from "../native/BundledAssets";
+import { readTextFile, writeTextFileAtomically } from "../native/BundledAssets";
 import { pickFile } from "../native/FilePicker";
 import { FileExplorer } from "./FileExplorer";
 import { openProjectFromPicker } from "../workspace/OpenProjectFlow";
@@ -56,6 +56,7 @@ interface ProjectSession {
   /** Mutable box, not React state: read by closures registered once at session-build time, so they always see the latest value without needing to be re-registered. */
   readonly environmentDigest: { current: string };
   readonly dispatchViewportEvent: (event: ViewportSurfaceEvent) => void;
+  requestEvaluation(): void;
   dispose(): void;
 }
 
@@ -81,6 +82,8 @@ async function loadSnapshotJson(snapshotPath: string): Promise<EvaluationSnapsho
 
 export function AppShell() {
   const [session, setSession] = useState<ProjectSession | null>(null);
+  const sessionRef = useRef<ProjectSession | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
   const [health, setHealth] = useState<WorkerHealth>({ phase: "no_worker" });
   const [documents, setDocuments] = useState<readonly OpenDocument[]>([]);
@@ -109,6 +112,8 @@ export function AppShell() {
   activeDocumentPathRef.current = activeDocumentPath;
 
   const closeSession = useCallback(() => {
+    sessionRef.current = null;
+    setSaveError(null);
     setSession((current) => {
       current?.dispose();
       return null;
@@ -134,7 +139,11 @@ export function AppShell() {
 
     closeSession();
 
-    const documentStore = new DocumentStore({ readFile: readTextFile });
+    const documentStore = new DocumentStore({
+      projectRoot: project.rootPath,
+      readFile: readTextFile,
+      writeFile: writeTextFileAtomically,
+    });
     const snapshotStore = new SnapshotStore();
     const transport = new WorkerBridge();
     const coordinator = new EvaluationCoordinator({
@@ -250,6 +259,7 @@ export function AppShell() {
       outputDirectory,
       environmentDigest,
       dispatchViewportEvent,
+      requestEvaluation: requestEvaluationNow,
       dispose: () => {
         unsubscribeHealth();
         unsubscribeOutcome();
@@ -260,6 +270,7 @@ export function AppShell() {
         void lspClient.stop();
       },
     };
+    sessionRef.current = newSession;
     setSession(newSession);
   }, [closeSession]);
 
@@ -291,8 +302,22 @@ export function AppShell() {
 
   const saveActiveDocument = useCallback(() => {
     if (!session || !activeDocumentPath) return;
-    session.documentStore.markSaved(activeDocumentPath);
-    setDocuments(session.documentStore.listOpen());
+    setSaveError(null);
+    void session.documentStore.save(activeDocumentPath).then(
+      () => {
+        if (sessionRef.current !== session) return;
+        setSaveError(null);
+        setDocuments(session.documentStore.listOpen());
+        if (session.documentStore.projectRelativePath(activeDocumentPath)) {
+          session.requestEvaluation();
+        }
+      },
+      (error: unknown) => {
+        if (sessionRef.current === session) {
+          setSaveError(`Could not save ${activeDocumentPath}: ${String(error)}`);
+        }
+      },
+    );
   }, [session, activeDocumentPath]);
 
   const currentSnapshot = useMemo(() => session?.snapshotStore.getAccepted() ?? null, [session, snapshotVersion]);
@@ -310,8 +335,7 @@ export function AppShell() {
   /** `activeDocumentPath` relative to the open project's root — what `SourceSpan.path`/`SourceMapping` actually key on. */
   const activeRelativePath = useMemo(() => {
     if (!session || !activeDocumentPath) return null;
-    const prefix = `${session.project.rootPath}/`;
-    return activeDocumentPath.startsWith(prefix) ? activeDocumentPath.slice(prefix.length) : activeDocumentPath;
+    return session.documentStore.projectRelativePath(activeDocumentPath);
   }, [session, activeDocumentPath]);
 
   const highlightNodeInEditor = useCallback(
@@ -408,6 +432,7 @@ export function AppShell() {
           {currentStatus.kind === "failed" ? <StatusBadge tone="error" label="Evaluation failed" /> : null}
           {openError ? <Text tone="secondary">{openError}</Text> : null}
         </Stack>
+        {saveError ? <Text tone="primary">{saveError}</Text> : null}
       </Panel>
       <Stack direction="row" flex={1}>
         <Resizable edge="right" size={explorerWidth} onResize={setExplorerWidth} minSize={180} maxSize={520}>

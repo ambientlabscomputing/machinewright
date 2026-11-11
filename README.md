@@ -120,25 +120,28 @@ failure events.
 
 ## Native editor
 
-The native application uses Floem as an adapter around the framework-neutral
-`machinewright-app` ports. It opens and edits a Python source file, tracks and
-saves rope-backed changes, evaluates unsaved overlays after a 300 ms debounce,
-and retains the last valid snapshot when a newer generation fails. The graph
-panel and GPU-backed projected geometry view share component selection and show
-the selected source mapping. A pinned `ty` language server runs behind the
-framework-neutral language port and reports diagnostics for unsaved buffers.
+The React Native macOS app opens a Machinewright project and edits its Python
+source. It evaluates unsaved changes through the project's Python worker,
+keeps the last valid snapshot if a newer evaluation fails, and links graph
+and viewport selection to source locations. For inline diagnostics, install
+`pylsp` in the project environment alongside `machinewright-worker`.
+
+With Xcode, CocoaPods, Node.js 24+, and uv installed, run from the
+Machinewright checkout:
 
 ```bash
-cd native
-MACHINEWRIGHT_WORKER=../.venv/bin/machinewright-worker \
-  cargo run -p machinewright-floem --bin machinewright-floem -- \
-  ../examples/reference_project.py
+make sync
+make app-install
+make run
 ```
 
-A bundle can contain STEP, STL, preview SVG, print-layout STL, structured BOM
-JSON, BOM CSV, canonical hardware-graph JSON, Graphviz DOT, and a provenance
-manifest. Logical digests are derived from canonical graph content rather than
-CAD file bytes.
+Use **Open Project** to select the Machinewright checkout for the reference
+design. Its template lives in `examples/reference_project.py`.
+
+The default export bundle includes STEP, STL, preview SVG, structured BOM JSON,
+BOM CSV, canonical hardware-graph JSON, Graphviz DOT, and a provenance
+manifest. It includes a print-layout STL when the design contains printed
+parts. Logical digests are derived from canonical graph content.
 
 ## Development
 

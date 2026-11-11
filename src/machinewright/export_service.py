@@ -28,6 +28,7 @@ from machinewright.hardware_graph import ResolvedDesign
 from machinewright.lib.bom import generate_structured_bom, write_bom_csv
 from machinewright.lib.cadq import exports
 from machinewright.lib.layout import layout_for_printing
+from machinewright.lib.materials import Process
 
 
 class ExportFormat(StrEnum):
@@ -193,6 +194,7 @@ def export_artifacts(  # noqa: C901 - one transactional artifact pipeline
     Memory and CPU limits are applied to the current process when requested, so
     callers should set them only in a dedicated Linux worker process. Elapsed
     time, part count, cancellation, and output bytes are enforced directly.
+    A full bundle omits the print layout when there are no printed parts.
     """
     request = request or ExportRequest()
     apply_linux_process_limits(request.limits)
@@ -224,6 +226,11 @@ def export_artifacts(  # noqa: C901 - one transactional artifact pipeline
             ),
         )
     formats = tuple(dict.fromkeys(request.formats))
+    if set(formats) == set(ExportFormat) and not any(
+        material is not None and material.process == Process.PRINTED
+        for material in design.materials.values()
+    ):
+        formats = tuple(kind for kind in formats if kind != ExportFormat.PRINT_LAYOUT_STL)
     if ExportFormat.MANIFEST_JSON in formats:
         formats = tuple(
             item for item in formats if item != ExportFormat.MANIFEST_JSON

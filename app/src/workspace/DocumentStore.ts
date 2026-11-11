@@ -19,7 +19,7 @@
 export type DocumentChangeOrigin = "typing" | "paste" | "undo" | "redo" | "reload";
 
 export interface OpenDocument {
-  /** Project-relative, POSIX-separated path — matches SourceSpan.path. */
+  /** Absolute filesystem path used by the editor and native file APIs. */
   readonly path: string;
   readonly documentVersion: number;
   readonly savedContent: string;
@@ -38,18 +38,25 @@ export interface SourceOverlayInput {
 }
 
 export interface DocumentStoreOptions {
+  readonly projectRoot: string;
   readonly readFile: (path: string) => Promise<string>;
+  readonly writeFile: (path: string, content: string) => Promise<void>;
 }
 
 const encoder = new TextEncoder();
 
 export class DocumentStore {
-  private readonly readFile: (path: string) => Promise<string>;
+  private readonly projectPrefix: string;
+  private readonly readFile: DocumentStoreOptions["readFile"];
+  private readonly writeFile: DocumentStoreOptions["writeFile"];
+  private readonly pendingSaves = new Map<string, Promise<void>>();
   private readonly documents = new Map<string, OpenDocument>();
   private readonly listeners = new Set<(event: DocumentChangeEvent) => void>();
 
   constructor(options: DocumentStoreOptions) {
+    this.projectPrefix = options.projectRoot.replace(/\/+$/, "") + "/";
     this.readFile = options.readFile;
+    this.writeFile = options.writeFile;
   }
 
   /** Opens (or returns the already-open) document at `path`. */
@@ -99,28 +106,49 @@ export class DocumentStore {
     return next;
   }
 
-  /**
-   * Marks the current buffer as saved to disk. This does not itself change
-   * `bufferContent` and is not a document-change origin — the buffer's
-   * *content* hasn't changed, only its saved/dirty status has — so this
-   * never notifies (no reevaluation is triggered just by saving).
-   */
-  markSaved(path: string): void {
-    const existing = this.documents.get(path);
-    if (!existing) return;
-    this.documents.set(path, { ...existing, savedContent: existing.bufferContent, dirty: false });
+  /** Save the captured buffer in order, even if the user keeps editing. */
+  async save(path: string): Promise<void> {
+    const document = this.documents.get(path);
+    if (!document) return;
+    const content = document.bufferContent;
+    const previous = this.pendingSaves.get(path);
+    const write = async () => {
+      await this.writeFile(path, content);
+      const current = this.documents.get(path);
+      if (!current) return;
+      this.documents.set(path, {
+        ...current,
+        savedContent: content,
+        dirty: current.bufferContent !== content,
+      });
+    };
+    const pending = previous ? previous.then(write, write) : Promise.resolve().then(write);
+    this.pendingSaves.set(path, pending);
+    try {
+      await pending;
+    } finally {
+      if (this.pendingSaves.get(path) === pending) this.pendingSaves.delete(path);
+    }
+  }
+
+  projectRelativePath(path: string): string | null {
+    if (!path.startsWith(this.projectPrefix)) return null;
+    const relative = path.slice(this.projectPrefix.length);
+    if (relative.split("/").some((segment) => !segment || segment === "." || segment === "..")) return null;
+    return relative;
   }
 
   close(path: string): void {
     this.documents.delete(path);
   }
 
-  /** Every dirty open document, as worker `SourceOverlay` inputs. */
+  /** In-project buffers that may differ from disk, as worker overlays. */
   overlaysForEvaluation(): readonly SourceOverlayInput[] {
     const overlays: SourceOverlayInput[] = [];
     for (const document of this.documents.values()) {
-      if (!document.dirty) continue;
-      overlays.push({ relativePath: document.path, content: encoder.encode(document.bufferContent) });
+      if (!document.dirty && !this.pendingSaves.has(document.path)) continue;
+      const relativePath = this.projectRelativePath(document.path);
+      if (relativePath) overlays.push({ relativePath, content: encoder.encode(document.bufferContent) });
     }
     return overlays;
   }
