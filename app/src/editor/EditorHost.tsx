@@ -25,6 +25,7 @@ import type {
   DocumentVersion,
   EditorDiagnostic,
   EditorSurfaceEvent,
+  LanguageResult,
 } from "../protocol/surfaces/editor";
 import { colors } from "../design-system/tokens/colors";
 
@@ -43,6 +44,7 @@ export interface EditorSurfaceHandle {
   setSelection(path: string, range: ByteRange): void;
   setDiagnostics(path: string, documentVersion: DocumentVersion, diagnostics: readonly EditorDiagnostic[]): void;
   closeDocument(path: string): void;
+  languageResult(id: number, result: LanguageResult): void;
 }
 
 export interface EditorSurfaceViewProps {
@@ -87,6 +89,7 @@ export const EditorSurfaceView = forwardRef<EditorSurfaceHandle, EditorSurfaceVi
         setDiagnostics: (path, documentVersion, diagnostics) =>
           post({ kind: "setDiagnostics", path, documentVersion, diagnostics }),
         closeDocument: (path) => post({ kind: "closeDocument", path }),
+        languageResult: (id, result) => post({ kind: "languageResult", id, result }),
       }),
       [post],
     );
@@ -134,6 +137,7 @@ export function EditorHost() {
   const surfaceRef = useRef<EditorSurfaceHandle>(null);
   const lspClientRef = useRef<LspClient | null>(null);
   const documentTextRef = useRef<string>("");
+  const documentVersionRef = useRef(1);
 
   useEffect(() => {
     return () => {
@@ -145,9 +149,9 @@ export function EditorHost() {
     setLspStatus("starting");
     const client = new LspClient();
     lspClientRef.current = client;
-    client.onDiagnostics = (_uri, diagnostics) => {
+    client.onDiagnostics = (_uri, _text, diagnostics) => {
       setDiagnosticCount(diagnostics.length);
-      surfaceRef.current?.setDiagnostics(DOCUMENT_PATH, 0, diagnostics);
+      surfaceRef.current?.setDiagnostics(DOCUMENT_PATH, documentVersionRef.current, diagnostics);
     };
     try {
       await client.start(LSP_PATH, `file://${REPO_ROOT}`);
@@ -169,7 +173,10 @@ export function EditorHost() {
         });
       } else if (surfaceEvent.kind === "documentChanged") {
         documentTextRef.current = surfaceEvent.content;
-        void lspClientRef.current?.didChange(DOCUMENT_URI, surfaceEvent.content);
+        documentVersionRef.current = surfaceEvent.documentVersion;
+        void lspClientRef.current?.didChange(DOCUMENT_URI, surfaceEvent.content).catch(() => {});
+      } else if (surfaceEvent.kind === "languageQuery") {
+        surfaceRef.current?.languageResult(surfaceEvent.id, null);
       }
     },
     [startLsp],

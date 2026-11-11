@@ -10,12 +10,15 @@
  * duplicating that logic here.
  */
 import { EditorState } from "@codemirror/state";
-import { EditorView, keymap, lineNumbers, highlightActiveLine, type ViewUpdate } from "@codemirror/view";
-import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { python } from "@codemirror/lang-python";
+import { EditorView, keymap, lineNumbers, highlightActiveLine, hoverTooltip, type ViewUpdate } from "@codemirror/view";
+import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { autocompletion, closeBrackets, closeBracketsKeymap, type CompletionContext } from "@codemirror/autocomplete";
+import { bracketMatching, defaultHighlightStyle, foldGutter, foldKeymap, indentOnInput, indentUnit, syntaxHighlighting } from "@codemirror/language";
+import { searchKeymap } from "@codemirror/search";
+import { python, pythonLanguage } from "@codemirror/lang-python";
 import { setDiagnostics as cmSetDiagnostics, lintGutter, type Diagnostic as CmDiagnostic } from "@codemirror/lint";
-import { utf8ByteOffsetToStringIndex, stringIndexToUtf8ByteOffset } from "../../../src/editor/offsets";
-import type { EditorHostCommand, EditorSurfaceEvent } from "../../../src/protocol/surfaces/editor";
+import { utf8ByteOffsetToStringIndex, stringIndexToUtf8ByteOffset, stringIndexToLspPosition } from "../../../src/editor/offsets";
+import type { EditorHostCommand, EditorSurfaceEvent, LanguageQuery, LanguageResult } from "../../../src/protocol/surfaces/editor";
 
 declare global {
   interface Window {
@@ -66,16 +69,88 @@ function onUpdate(update: ViewUpdate): void {
   }
 }
 
-function buildExtensions(readOnly: boolean) {
+let nextQueryId = 0;
+const queries = new Map<number, (result: LanguageResult) => void>();
+
+function queryLanguage(query: LanguageQuery, offset: number): Promise<LanguageResult> {
+  if (!currentPath) return Promise.resolve(null);
+  const id = ++nextQueryId;
+  const path = currentPath;
+  const documentVersion = currentDocumentVersion;
+  return new Promise((resolve) => {
+    const timeout = window.setTimeout(() => {
+      queries.delete(id);
+      resolve(null);
+    }, 6000);
+    queries.set(id, (result) => {
+      clearTimeout(timeout);
+      resolve(path === currentPath && documentVersion === currentDocumentVersion ? result : null);
+    });
+    post({
+      kind: "languageQuery", id, path, documentVersion, query,
+      position: stringIndexToLspPosition(view.state.doc.toString(), offset),
+    });
+  });
+}
+
+async function pythonCompletion(context: CompletionContext) {
+  const word = context.matchBefore(/[\p{L}\p{N}_]+/u);
+  if (!word && !context.explicit && context.state.sliceDoc(context.pos - 1, context.pos) !== ".") return null;
+  const result = await queryLanguage("completion", context.pos);
+  if (result?.kind !== "completion" || context.aborted || !result.options.length) return null;
+  return {
+    from: word?.from ?? context.pos,
+    options: result.options.map(({ label, detail, insertText }) => ({ label, detail, apply: insertText })),
+  };
+}
+
+const pythonHover = hoverTooltip(async (_view, pos) => {
+  const result = await queryLanguage("hover", pos);
+  if (result?.kind !== "hover" || !result.text.trim()) return null;
+  return {
+    pos,
+    above: true,
+    create() {
+      const dom = document.createElement("div");
+      dom.className = "python-hover";
+      dom.textContent = result.text;
+      return { dom };
+    },
+  };
+});
+
+function buildExtensions(readOnly: boolean, path = "") {
+  const isPython = /\.pyi?$/.test(path);
   return [
     lineNumbers(),
     highlightActiveLine(),
     history(),
-    keymap.of([...defaultKeymap, ...historyKeymap]),
-    python(),
+    keymap.of([
+      { key: "Mod-s", run: () => {
+        if (currentPath) post({ kind: "saveRequested", path: currentPath });
+        return true;
+      } },
+      ...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, ...searchKeymap, ...foldKeymap, indentWithTab,
+    ]),
     lintGutter(),
     EditorState.readOnly.of(readOnly),
     EditorView.updateListener.of(onUpdate),
+    ...(isPython ? [
+      python(),
+      syntaxHighlighting(defaultHighlightStyle),
+      indentUnit.of("    "),
+      indentOnInput(),
+      bracketMatching(),
+      closeBrackets(),
+      foldGutter(),
+      autocompletion(),
+      pythonLanguage.data.of({ autocomplete: pythonCompletion }),
+      pythonHover,
+      keymap.of([{ key: "F12", run: (editor) => {
+        void queryLanguage("definition", editor.state.selection.main.head);
+        return true;
+      } }]),
+    ] : []),
   ];
 }
 
@@ -91,12 +166,13 @@ function handleCommand(command: EditorHostCommand): void {
       currentDocumentVersion = command.documentVersion;
       suppressChangeEvent = true;
       view.setState(
-        EditorState.create({ doc: command.content, extensions: buildExtensions(command.readOnly) }),
+        EditorState.create({ doc: command.content, extensions: buildExtensions(command.readOnly, command.path) }),
       );
       suppressChangeEvent = false;
       break;
     }
     case "applyExternalEdit": {
+      if (command.path !== currentPath) break;
       suppressChangeEvent = true;
       currentDocumentVersion = command.documentVersion;
       view.dispatch({
@@ -106,6 +182,7 @@ function handleCommand(command: EditorHostCommand): void {
       break;
     }
     case "setSelection": {
+      if (command.path !== currentPath) break;
       const text = view.state.doc.toString();
       const anchor = utf8ByteOffsetToStringIndex(text, command.range.startByte);
       const head = utf8ByteOffsetToStringIndex(text, command.range.endByte);
@@ -119,6 +196,7 @@ function handleCommand(command: EditorHostCommand): void {
       break;
     }
     case "setDiagnostics": {
+      if (command.path !== currentPath || command.documentVersion !== currentDocumentVersion) break;
       const text = view.state.doc.toString();
       const cmDiagnostics: CmDiagnostic[] = command.diagnostics.map((diagnostic) => ({
         from: utf8ByteOffsetToStringIndex(text, diagnostic.range.startByte),
@@ -127,6 +205,11 @@ function handleCommand(command: EditorHostCommand): void {
         message: diagnostic.message,
       }));
       view.dispatch(cmSetDiagnostics(view.state, cmDiagnostics));
+      break;
+    }
+    case "languageResult": {
+      queries.get(command.id)?.(command.result);
+      queries.delete(command.id);
       break;
     }
     case "closeDocument": {

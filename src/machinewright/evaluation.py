@@ -17,7 +17,7 @@ import sys
 import tempfile
 from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import Field, PydanticInvalidForJsonSchema
 
 from machinewright.canonical import canonical_json, content_digest
 from machinewright.contracts import Contract
@@ -389,10 +389,18 @@ def evaluate_project(
     cancellation: CancellationToken | None = None,
     progress: Callable[[Any], None] | None = None,
     cache: EvaluationCache | None = None,
+    on_input_schema: Callable[[dict[str, Any]], None] | None = None,
 ) -> EvaluationOutcome:
     root, config = load_project(project_root)
     load_declared_templates(root, config)
     template = get_machine_template(template_id, template_version)
+    if on_input_schema is not None:
+        try:
+            schema = template.input_schema()
+        except PydanticInvalidForJsonSchema:
+            pass
+        else:
+            on_input_schema(schema)
     source_files = list(root.rglob("*.py")) + [root / "machinewright.toml"]
     project_source_digest = _tree_digest(source_files, root)
     environment_digest = _file_digest(root / config.environment_lock)

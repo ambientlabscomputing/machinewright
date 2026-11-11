@@ -2,7 +2,7 @@
  * A panel with one draggable edge (RFD-19 "Layout and interaction":
  * "navigation, graph, inspectors, and diagnostics sit in aligned, resizable
  * regions around them"). Wraps its child at a controlled pixel size and
- * exposes a thin drag handle on the trailing edge that reports the new
+ * exposes a thin drag handle on the selected edge that reports the new
  * size — the caller owns the size as ordinary state, this component never
  * owns layout state of its own.
  *
@@ -21,7 +21,7 @@ import { colors } from "../tokens/colors";
 
 const HANDLE_THICKNESS = 6;
 
-export type ResizeEdge = "right" | "bottom";
+export type ResizeEdge = "left" | "right" | "bottom";
 
 export interface ResizableProps {
   readonly size: number;
@@ -37,6 +37,7 @@ export function Resizable({ size, onResize, minSize = 120, maxSize = 900, edge, 
   // gesture start (not from the previous move event), so the only state
   // this needs to capture at grant time is the size the drag started from.
   const startSize = useRef(size);
+  const horizontal = edge !== "bottom";
 
   const responder = useMemo(
     () =>
@@ -46,23 +47,23 @@ export function Resizable({ size, onResize, minSize = 120, maxSize = 900, edge, 
           startSize.current = size;
         },
         onPanResponderMove: (_event, gesture: PanResponderGestureState) => {
-          const delta = edge === "right" ? gesture.dx : gesture.dy;
-          const next = Math.min(maxSize, Math.max(minSize, startSize.current + delta));
+          const delta = horizontal ? gesture.dx : gesture.dy;
+          const next = Math.min(maxSize, Math.max(minSize, startSize.current + (edge === "left" ? -delta : delta)));
           onResize(next);
         },
       }),
     // Recreated whenever these change so every callback closes over the
     // latest render's values rather than a stale one from responder-creation time.
-    [edge, size, onResize, minSize, maxSize],
+    [edge, horizontal, size, onResize, minSize, maxSize],
   );
 
   return (
-    <View style={edge === "right" ? { width: size, flexDirection: "row" } : { height: size, flexDirection: "column" }}>
+    <View style={horizontal ? { width: size, flexDirection: edge === "left" ? "row-reverse" : "row" } : { height: size, flexDirection: "column" }}>
       <View style={{ flex: 1 }}>{children}</View>
       <View
         {...responder.panHandlers}
         style={
-          edge === "right"
+          horizontal
             ? { width: HANDLE_THICKNESS, backgroundColor: colors.border.subtle }
             : { height: HANDLE_THICKNESS, backgroundColor: colors.border.subtle }
         }

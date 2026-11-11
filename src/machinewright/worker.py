@@ -31,6 +31,7 @@ from machinewright.templates import clear_machine_templates
 
 PROTOCOL_VERSION = 1
 CAPABILITIES = (
+    "input_schema.v1",
     "evaluation.v1",
     "source_overlays.v1",
     "progress.v1",
@@ -348,6 +349,15 @@ class Worker:
                 generation=request.generation,
                 cancellation=token,
                 progress=progress,
+                on_input_schema=lambda schema: self.writer.write(
+                    protocol.WorkerEvent(
+                        input_schema=protocol.EvaluationInputSchema(
+                            session_id=request.session_id,
+                            generation=request.generation,
+                            schema_json=canonical_json(schema).encode(),
+                        )
+                    )
+                ),
             )
             if token.cancelled:
                 self.writer.write(

@@ -16,6 +16,9 @@
 
 export interface JsonSchemaNode {
   readonly type?: string;
+  readonly $defs?: Readonly<Record<string, JsonSchemaNode>>;
+  readonly description?: string;
+  readonly enum?: readonly unknown[];
   readonly properties?: Readonly<Record<string, JsonSchemaNode>>;
   readonly minimum?: number;
   readonly maximum?: number;

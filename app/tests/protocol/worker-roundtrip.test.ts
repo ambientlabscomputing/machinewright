@@ -94,6 +94,13 @@ describe("worker protocol round-trip", () => {
           }),
         );
 
+        const schemaEvent = await nextEvent();
+        expect(schemaEvent.event.case).toBe("inputSchema");
+        if (schemaEvent.event.case !== "inputSchema") throw new Error("expected the template input schema");
+        expect(schemaEvent.event.value.generation).toBe(PRECISION_PROBE_GENERATION);
+        const schema = JSON.parse(new TextDecoder().decode(schemaEvent.event.value.schemaJson));
+        expect(schema.properties.requirements.properties.payload_kg.type).toBe("number");
+
         let result = await nextEvent();
         while (result.event.case === "progress") {
           result = await nextEvent();

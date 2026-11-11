@@ -154,6 +154,12 @@ message SweepPointCancelled {
   uint32 point_index = 3;
 }
 
+message EvaluationInputSchema {
+  string session_id = 1;
+  uint64 generation = 2;
+  bytes schema_json = 3;
+}
+
 message WorkerEvent {
   oneof event {
     CapabilityReport capabilities = 1;
@@ -165,5 +171,6 @@ message WorkerEvent {
     SweepPointCompleted sweep_point_completed = 7;
     SweepPointFailed sweep_point_failed = 8;
     SweepPointCancelled sweep_point_cancelled = 9;
+    EvaluationInputSchema input_schema = 10;
   }
 }

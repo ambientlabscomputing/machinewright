@@ -31,6 +31,7 @@ local_build = f"machinewright @ {Path(wheel_path).resolve().as_uri()}"
 project.write_text(source.replace(json.dumps(release), json.dumps(local_build)), encoding="utf-8")
 PY
 uv sync --python 3.13
+test -x .venv/bin/pylsp
 uv run --no-sync machinewright project validate
 uv run --no-sync machinewright project evaluate indexing-table.main 0.1.0 inputs.json artifacts/ > before.json
 uv run --no-sync python - <<'PY'

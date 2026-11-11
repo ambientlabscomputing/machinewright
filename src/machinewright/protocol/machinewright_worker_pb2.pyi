@@ -245,8 +245,18 @@ class SweepPointCancelled(_message.Message):
     point_index: int
     def __init__(self, session_id: _Optional[str] = ..., sweep_id: _Optional[int] = ..., point_index: _Optional[int] = ...) -> None: ...
 
+class EvaluationInputSchema(_message.Message):
+    __slots__ = ("session_id", "generation", "schema_json")
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    GENERATION_FIELD_NUMBER: _ClassVar[int]
+    SCHEMA_JSON_FIELD_NUMBER: _ClassVar[int]
+    session_id: str
+    generation: int
+    schema_json: bytes
+    def __init__(self, session_id: _Optional[str] = ..., generation: _Optional[int] = ..., schema_json: _Optional[bytes] = ...) -> None: ...
+
 class WorkerEvent(_message.Message):
-    __slots__ = ("capabilities", "progress", "diagnostics", "completed", "failed", "cancelled", "sweep_point_completed", "sweep_point_failed", "sweep_point_cancelled")
+    __slots__ = ("capabilities", "progress", "diagnostics", "completed", "failed", "cancelled", "sweep_point_completed", "sweep_point_failed", "sweep_point_cancelled", "input_schema")
     CAPABILITIES_FIELD_NUMBER: _ClassVar[int]
     PROGRESS_FIELD_NUMBER: _ClassVar[int]
     DIAGNOSTICS_FIELD_NUMBER: _ClassVar[int]
@@ -256,6 +266,7 @@ class WorkerEvent(_message.Message):
     SWEEP_POINT_COMPLETED_FIELD_NUMBER: _ClassVar[int]
     SWEEP_POINT_FAILED_FIELD_NUMBER: _ClassVar[int]
     SWEEP_POINT_CANCELLED_FIELD_NUMBER: _ClassVar[int]
+    INPUT_SCHEMA_FIELD_NUMBER: _ClassVar[int]
     capabilities: CapabilityReport
     progress: EvaluationProgress
     diagnostics: PartialDiagnostics
@@ -265,4 +276,5 @@ class WorkerEvent(_message.Message):
     sweep_point_completed: SweepPointCompleted
     sweep_point_failed: SweepPointFailed
     sweep_point_cancelled: SweepPointCancelled
-    def __init__(self, capabilities: _Optional[_Union[CapabilityReport, _Mapping]] = ..., progress: _Optional[_Union[EvaluationProgress, _Mapping]] = ..., diagnostics: _Optional[_Union[PartialDiagnostics, _Mapping]] = ..., completed: _Optional[_Union[EvaluationCompleted, _Mapping]] = ..., failed: _Optional[_Union[EvaluationFailed, _Mapping]] = ..., cancelled: _Optional[_Union[EvaluationCancelled, _Mapping]] = ..., sweep_point_completed: _Optional[_Union[SweepPointCompleted, _Mapping]] = ..., sweep_point_failed: _Optional[_Union[SweepPointFailed, _Mapping]] = ..., sweep_point_cancelled: _Optional[_Union[SweepPointCancelled, _Mapping]] = ...) -> None: ...
+    input_schema: EvaluationInputSchema
+    def __init__(self, capabilities: _Optional[_Union[CapabilityReport, _Mapping]] = ..., progress: _Optional[_Union[EvaluationProgress, _Mapping]] = ..., diagnostics: _Optional[_Union[PartialDiagnostics, _Mapping]] = ..., completed: _Optional[_Union[EvaluationCompleted, _Mapping]] = ..., failed: _Optional[_Union[EvaluationFailed, _Mapping]] = ..., cancelled: _Optional[_Union[EvaluationCancelled, _Mapping]] = ..., sweep_point_completed: _Optional[_Union[SweepPointCompleted, _Mapping]] = ..., sweep_point_failed: _Optional[_Union[SweepPointFailed, _Mapping]] = ..., sweep_point_cancelled: _Optional[_Union[SweepPointCancelled, _Mapping]] = ..., input_schema: _Optional[_Union[EvaluationInputSchema, _Mapping]] = ...) -> None: ...

@@ -216,6 +216,14 @@ def test_worker_evaluates_project_and_returns_immutable_snapshot(tmp_path: Path)
     )
     events = _parse_worker_events(process.stdout)
     completed = next(event.completed for event in events if event.HasField("completed"))
+    schema_event = next(event.input_schema for event in events if event.HasField("input_schema"))
+    assert schema_event.session_id == "test-session"
+    assert schema_event.generation == 7
+    schema = json.loads(schema_event.schema_json)
+    assert schema["properties"]["requirements"]["properties"]["payload_kg"]["type"] == "number"
+    assert next(i for i, event in enumerate(events) if event.HasField("input_schema")) < next(
+        i for i, event in enumerate(events) if event.HasField("completed")
+    )
     assert completed.generation == 7
     assert Path(completed.snapshot_path).is_file()
     # R11b: the worker reports digests of what it actually read so a caller

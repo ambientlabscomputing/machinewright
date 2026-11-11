@@ -33,16 +33,25 @@ import { createNativeCacheClient } from "../cache/nativeCacheClient";
 import { SnapshotStore } from "../model/SnapshotStore";
 import { EMPTY_SELECTION, selectionOfNode, selectionOfNodes, type Selection } from "../model/Selection";
 import { resolveNodeIdsInMappings, resolveSpanInMappings } from "../model/sourceMapping";
-import { fromEditorDiagnostics, mergeDiagnostics, type StructuredDiagnostic } from "../model/Diagnostics";
+import { fromEditorDiagnostics, fromEvaluationFailure, mergeDiagnostics, type StructuredDiagnostic } from "../model/Diagnostics";
 import type { EvaluationSnapshot } from "../model/generated/EvaluationSnapshot";
 import { GraphTree } from "../graph/GraphTree";
 import { EditorSurfaceView, type EditorSurfaceHandle } from "../editor/EditorHost";
 import { ViewportSurfaceView, type ViewportSurfaceHandle } from "../viewport/ViewportHost";
+import { InputsPanel, parseInputs, setInput, type InputValues } from "./InputsPanel";
+import type { JsonSchemaNode } from "../analysis/inputSchema";
+import { lspPositionToUtf8ByteOffset } from "../editor/offsets";
 import { LspClient } from "../editor/LspClient";
-import type { EditorSurfaceEvent } from "../protocol/surfaces/editor";
+import type { EditorDiagnostic, EditorSurfaceEvent } from "../protocol/surfaces/editor";
 import type { ViewportSurfaceEvent } from "../protocol/surfaces/viewport";
 
-const DEFAULT_INPUTS_JSON = new TextEncoder().encode("{}");
+function fileUri(path: string): string {
+  return `file://${path.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+function isPython(path: string): boolean {
+  return /\.pyi?$/.test(path);
+}
 
 /** One project's worth of shared, long-lived state — constructed exactly once per "Open Project", disposed on close/switch. */
 interface ProjectSession {
@@ -52,12 +61,16 @@ interface ProjectSession {
   readonly snapshotStore: SnapshotStore;
   readonly snapshotInstaller: SnapshotInstaller;
   readonly lspClient: LspClient;
+  readonly lspReady: Promise<boolean>;
+  readonly pythonDiagnostics: Map<string, { text: string; items: readonly EditorDiagnostic[] }>;
+  changeInput(path: readonly string[], value: unknown): void;
+  resetInputs(): void;
   readonly outputDirectory: string;
   /** Mutable box, not React state: read by closures registered once at session-build time, so they always see the latest value without needing to be re-registered. */
   readonly environmentDigest: { current: string };
   readonly dispatchViewportEvent: (event: ViewportSurfaceEvent) => void;
   requestEvaluation(): void;
-  dispose(): void;
+  dispose(): Promise<void>;
 }
 
 function buildViewportSurfacePort(
@@ -91,6 +104,12 @@ export function AppShell() {
   const [editorReady, setEditorReady] = useState(false);
   const [selection, setSelection] = useState<Selection>(EMPTY_SELECTION);
   const [snapshotVersion, setSnapshotVersion] = useState(0); // bumped on every SnapshotStore change, to re-derive the memos below
+  const [inputSchema, setInputSchema] = useState<JsonSchemaNode | null>(null);
+  const [inputValues, setInputValues] = useState<InputValues>({});
+  const [inputError, setInputError] = useState<string | null>(null);
+  const [canResetInputs, setCanResetInputs] = useState(false);
+  const [lspStatus, setLspStatus] = useState<"starting" | "ready" | "unavailable">("starting");
+  const navigation = useRef<{ path: string; offset: number } | null>(null);
   const [lspDiagnostics, setLspDiagnostics] = useState<readonly StructuredDiagnostic[]>([]);
 
   // Panel sizes are a UI preference, not machine-affecting state (RFD-19:
@@ -100,7 +119,7 @@ export function AppShell() {
   const [explorerWidth, setExplorerWidth] = useState(260);
   const [explorerHeight, setExplorerHeight] = useState(280);
   const [editorWidth, setEditorWidth] = useState(560);
-  const [viewportWidth, setViewportWidth] = useState(560);
+  const [inspectorWidth, setInspectorWidth] = useState(260);
 
   const viewportRef = useRef<ViewportSurfaceHandle>(null);
   const editorRef = useRef<EditorSurfaceHandle>(null);
@@ -112,18 +131,23 @@ export function AppShell() {
   activeDocumentPathRef.current = activeDocumentPath;
 
   const closeSession = useCallback(() => {
+    const stopped = sessionRef.current?.dispose() ?? Promise.resolve();
     sessionRef.current = null;
+    navigation.current = null;
     setSaveError(null);
-    setSession((current) => {
-      current?.dispose();
-      return null;
-    });
+    setSession(null);
+    setInputSchema(null);
+    setInputValues({});
+    setInputError(null);
+    setCanResetInputs(false);
+    setLspStatus("starting");
     setDocuments([]);
     setActiveDocumentPath(null);
     setEditorReady(false);
     setSelection(EMPTY_SELECTION);
     setHealth({ phase: "no_worker" });
     setLspDiagnostics([]);
+    return stopped;
   }, []);
 
   const openProject = useCallback(async () => {
@@ -137,7 +161,7 @@ export function AppShell() {
     }
     if (project === null) return; // user cancelled
 
-    closeSession();
+    const stopped = closeSession();
 
     const documentStore = new DocumentStore({
       projectRoot: project.rootPath,
@@ -161,21 +185,35 @@ export function AppShell() {
     });
     const lspClient = new LspClient();
     const environmentDigest = { current: "" };
-    // The project's own first declared input configuration (typically
-    // examples/inputs/*.json), not a hardcoded stand-in — generating
-    // typed-input controls is M3's job (RFD-19 M3: "Generate controls from
-    // typed inputs"); M2 just needs *a* real input so the project's actual
-    // template can evaluate and its model can be seen at all.
-    const inputsJson = { current: DEFAULT_INPUTS_JSON };
+    let configuredInputs: InputValues = {};
+    let inputs: InputValues = {};
+    let inputsReady = false;
+    let disposed = false;
+    const pythonDiagnostics: ProjectSession["pythonDiagnostics"] = new Map();
+    const firstInput = project.config.inputConfigurations[0];
+    const inputPath = firstInput ? defaultJoinPath(project.rootPath, firstInput) : null;
+
+    function updateConfiguration(text: string) {
+      try {
+        configuredInputs = parseInputs(text);
+        inputs = configuredInputs;
+        setInputValues(inputs);
+        setCanResetInputs(false);
+        setInputError(null);
+      } catch (error) {
+        setInputError(`Input configuration: ${String(error)}`);
+      }
+    }
 
     const requestEvaluationNow = () => {
+      if (disposed || !inputsReady) return;
       const template = project.config.templates[0];
       if (!template) return; // no declared template — nothing to evaluate against yet
       const input: EvaluationInput = {
         projectRoot: project.rootPath,
         templateId: template.id,
         templateVersion: template.version,
-        inputsJson: inputsJson.current,
+        inputsJson: new TextEncoder().encode(JSON.stringify(inputs)),
         outputDirectory,
         overlays: documentStore.overlaysForEvaluation(),
         environmentDigest: environmentDigest.current,
@@ -190,12 +228,15 @@ export function AppShell() {
     const unsubscribeOutcome = coordinator.onOutcome((outcome) => {
       if (outcome.kind === "completed") {
         void snapshotInstaller.stage(outcome.result, outputDirectory);
+      } else if (outcome.kind === "inputSchema") {
+        setInputSchema(JSON.parse(new TextDecoder().decode(outcome.schemaJson)) as JsonSchemaNode);
       } else if (outcome.kind === "failed") {
         snapshotStore.setFailed(outcome.failure.generation, outcome.failure);
       }
     });
     const unsubscribeSnapshot = snapshotStore.subscribe(() => setSnapshotVersion((v) => v + 1));
-    const unsubscribeDocuments = documentStore.onChange(() => {
+    const unsubscribeDocuments = documentStore.onChange(({ document }) => {
+      if (document.path === inputPath) updateConfiguration(document.bufferContent);
       setDocuments(documentStore.listOpen());
       requestEvaluationNow();
     });
@@ -214,38 +255,41 @@ export function AppShell() {
         // workspace/Project.ts's "detection, not repair" scope.
       });
 
-    const firstInputConfiguration = project.config.inputConfigurations[0];
-    (firstInputConfiguration
-      ? readTextFile(defaultJoinPath(project.rootPath, firstInputConfiguration)).then(
-          (json) => new TextEncoder().encode(json),
-        )
-      : Promise.resolve(DEFAULT_INPUTS_JSON)
-    )
-      .then((resolvedInputsJson) => {
-        inputsJson.current = resolvedInputsJson;
+    void stopped.then(() => inputPath ? readTextFile(inputPath) : "{}")
+      .then((text) => {
+        if (!disposed) updateConfiguration(inputPath ? documentStore.get(inputPath)?.bufferContent ?? text : text);
       })
-      .catch(() => {
-        // Falls back to "{}" — the worker will report a structured
-        // validation diagnostic if the template actually requires fields,
-        // surfaced in the diagnostics panel rather than silently failing.
+      .catch((error: unknown) => {
+        if (!disposed) setInputError(`Could not read input configuration: ${String(error)}`);
       })
       .finally(() => {
-        // The real entry point: evaluate as soon as a project is opened, not
-        // only after the user's first edit — this is what actually lets an
-        // engineer see the model immediately (M2's "synchronized source,
-        // graph, and 3D selection" requires geometry to exist at all).
+        inputsReady = true;
         requestEvaluationNow();
       });
 
-    void lspClient.start(project.lspExecutablePath, `file://${project.rootPath}`).catch(() => {
-      // Missing/broken language server degrades to no inline diagnostics —
-      // never blocks opening the project or evaluating it.
+    lspClient.onExit = () => {
+      if (!disposed) setLspStatus("unavailable");
+    };
+    const lspReady = stopped.then(async () => {
+      if (disposed) return false;
+      try {
+        await lspClient.start(project.lspExecutablePath, fileUri(project.rootPath));
+        if (!disposed) setLspStatus("ready");
+        return !disposed;
+      } catch {
+        if (!disposed) setLspStatus("unavailable");
+        return false;
+      }
     });
-    lspClient.onDiagnostics = (uri, lspDiagnosticsForDocument) => {
-      const path = uri.startsWith("file://") ? uri.slice("file://".length) : uri;
-      setLspDiagnostics(fromEditorDiagnostics(lspDiagnosticsForDocument, path));
+    lspClient.onDiagnostics = (uri, text, items) => {
+      if (disposed) return;
+      const path = decodeURIComponent(uri.slice("file://".length));
+      const document = documentStore.get(path);
+      if (document?.bufferContent !== text) return;
+      pythonDiagnostics.set(path, { text, items });
       if (path === activeDocumentPathRef.current) {
-        editorRef.current?.setDiagnostics(path, 0, lspDiagnosticsForDocument);
+        setLspDiagnostics(fromEditorDiagnostics(items, path));
+        editorRef.current?.setDiagnostics(path, document.documentVersion, items);
       }
     };
 
@@ -256,18 +300,34 @@ export function AppShell() {
       snapshotStore,
       snapshotInstaller,
       lspClient,
+      lspReady,
+      pythonDiagnostics,
+      changeInput: (path, value) => {
+        inputs = setInput(inputs, path, value);
+        setInputValues(inputs);
+        setCanResetInputs(true);
+        requestEvaluationNow();
+      },
+      resetInputs: () => {
+        inputs = configuredInputs;
+        setInputValues(inputs);
+        setCanResetInputs(false);
+        requestEvaluationNow();
+      },
       outputDirectory,
       environmentDigest,
       dispatchViewportEvent,
       requestEvaluation: requestEvaluationNow,
-      dispose: () => {
+      dispose: async () => {
+        if (disposed) return;
+        disposed = true;
         unsubscribeHealth();
         unsubscribeOutcome();
         unsubscribeSnapshot();
         unsubscribeDocuments();
         snapshotInstaller.dispose();
         coordinator.dispose();
-        void lspClient.stop();
+        await Promise.allSettled([lspClient.stop(), transport.stop()]);
       },
     };
     sessionRef.current = newSession;
@@ -279,7 +339,7 @@ export function AppShell() {
     // opened/closed/replaced) — that identity is exactly what should
     // trigger disposing the previous one, so it is the right and only
     // dependency here.
-    return () => session?.dispose();
+    return () => { void session?.dispose(); };
   }, [session]);
 
   /** Shared by the "Open File" native picker and `FileExplorer`'s click-to-open. */
@@ -287,6 +347,7 @@ export function AppShell() {
     async (path: string) => {
       if (!session) return;
       await session.documentStore.open(path);
+      if (sessionRef.current !== session) return;
       setDocuments(session.documentStore.listOpen());
       setActiveDocumentPath(path);
     },
@@ -326,8 +387,12 @@ export function AppShell() {
     [session, snapshotVersion],
   );
   const diagnostics = useMemo(
-    () => mergeDiagnostics(currentSnapshot?.diagnostics ?? [], lspDiagnostics),
-    [currentSnapshot, lspDiagnostics],
+    () => mergeDiagnostics(
+      currentSnapshot?.diagnostics ?? [],
+      currentStatus.kind === "failed" ? [fromEvaluationFailure(currentStatus.failure)] : [],
+      lspDiagnostics,
+    ),
+    [currentSnapshot, currentStatus, lspDiagnostics],
   );
 
   const activeDocument = documents.find((d) => d.path === activeDocumentPath) ?? null;
@@ -355,11 +420,54 @@ export function AppShell() {
         setEditorReady(true);
         return;
       }
-      if (!session || !activeDocumentPath) return;
-      if (event.kind === "documentChanged") {
-        session.documentStore.applyChange(activeDocumentPath, event.content, event.origin);
-        void session.lspClient.didChange(`file://${activeDocumentPath}`, event.content);
-        setDocuments(session.documentStore.listOpen());
+      if (!session || event.path !== activeDocumentPath) return;
+      if (event.kind === "saveRequested") {
+        if (session.documentStore.get(event.path)?.dirty) saveActiveDocument();
+      } else if (event.kind === "languageQuery") {
+        const document = session.documentStore.get(event.path);
+        void (async () => {
+          let response: Awaited<ReturnType<LspClient["query"]>> = null;
+          try {
+            if (!session.documentStore.projectRelativePath(event.path) || !(await session.lspReady) || sessionRef.current !== session ||
+                document?.documentVersion !== event.documentVersion ||
+                session.documentStore.get(event.path)?.documentVersion !== event.documentVersion) return;
+            const uri = fileUri(event.path);
+            await session.lspClient.didOpen(uri, "python", document.bufferContent);
+            const result = await session.lspClient.query(uri, event.query, event.position);
+            if (sessionRef.current !== session || activeDocumentPathRef.current !== event.path ||
+                session.documentStore.get(event.path)?.documentVersion !== event.documentVersion) return;
+            if (result?.kind === "definition" && result.uri.startsWith("file:///")) {
+              const path = decodeURIComponent(result.uri.slice("file://".length));
+              const target = await session.documentStore.open(path);
+              if (sessionRef.current !== session || activeDocumentPathRef.current !== event.path ||
+                  session.documentStore.get(event.path)?.documentVersion !== event.documentVersion) return;
+              const offset = lspPositionToUtf8ByteOffset(target.bufferContent, result.position);
+              if (path === event.path) {
+                editorRef.current?.setSelection(path, { startByte: offset, endByte: offset });
+              } else {
+                navigation.current = { path, offset };
+                setDocuments(session.documentStore.listOpen());
+                setActiveDocumentPath(path);
+              }
+            } else {
+              response = result;
+            }
+          } catch {
+            // A timed-out or unsupported language query must leave the editor usable.
+          } finally {
+            if (sessionRef.current === session) editorRef.current?.languageResult(event.id, response);
+          }
+        })();
+      } else if (event.kind === "documentChanged") {
+        session.documentStore.applyChange(event.path, event.content, event.origin);
+        if (isPython(event.path)) {
+          void session.lspReady.then((ready) => {
+            if (ready && sessionRef.current === session) {
+              const latest = session.documentStore.get(event.path);
+              if (latest) return session.lspClient.didOpen(fileUri(event.path), "python", latest.bufferContent);
+            }
+          }).catch(() => {});
+        }
       } else if (event.kind === "selectionChanged" && currentSnapshot && activeRelativePath) {
         const nodeIds = resolveNodeIdsInMappings(currentSnapshot.sourceMap, activeRelativePath, event.range.startByte);
         if (nodeIds.length > 0) {
@@ -369,7 +477,7 @@ export function AppShell() {
         }
       }
     },
-    [session, activeDocumentPath, currentSnapshot, activeRelativePath],
+    [session, activeDocumentPath, currentSnapshot, activeRelativePath, saveActiveDocument],
   );
 
   const onViewportSurfaceEvent = useCallback(
@@ -399,6 +507,23 @@ export function AppShell() {
     const document = session.documentStore.get(activeDocumentPath);
     if (!document) return;
     editorRef.current?.loadDocument(document.path, document.bufferContent, document.documentVersion, false);
+    const target = navigation.current;
+    if (target?.path === document.path) {
+      navigation.current = null;
+      editorRef.current?.setSelection(target.path, { startByte: target.offset, endByte: target.offset });
+    }
+    const previous = session.pythonDiagnostics.get(document.path);
+    const items = previous?.text === document.bufferContent ? previous.items : [];
+    setLspDiagnostics(fromEditorDiagnostics(items, document.path));
+    editorRef.current?.setDiagnostics(document.path, document.documentVersion, items);
+    if (isPython(document.path) && session.documentStore.projectRelativePath(document.path)) {
+      void session.lspReady.then((ready) => {
+        if (ready && sessionRef.current === session) {
+          const latest = session.documentStore.get(document.path);
+          if (latest) return session.lspClient.didOpen(fileUri(document.path), "python", latest.bufferContent);
+        }
+      }).catch(() => {});
+    }
   }, [editorReady, session, activeDocumentPath]);
 
   const onSelectGraphNode = useCallback(
@@ -428,6 +553,10 @@ export function AppShell() {
             {session ? session.project.config.projectId : "No project open"}
           </Text>
           <WorkerHealthBadge health={health} />
+          {activeDocumentPath && isPython(activeDocumentPath) ? (
+            <StatusBadge tone={lspStatus === "unavailable" ? "error" : lspStatus === "starting" ? "pending" : "success"}
+              label={lspStatus === "unavailable" ? "Python LSP unavailable" : lspStatus === "starting" ? "Starting Python LSP…" : "Python LSP"} />
+          ) : null}
           {currentStatus.kind === "pending" ? <StatusBadge tone="pending" label="Evaluating…" /> : null}
           {currentStatus.kind === "failed" ? <StatusBadge tone="error" label="Evaluation failed" /> : null}
           {openError ? <Text tone="secondary">{openError}</Text> : null}
@@ -485,24 +614,35 @@ export function AppShell() {
             )}
           </Stack>
         </Resizable>
-        <Resizable edge="right" size={viewportWidth} onResize={setViewportWidth} minSize={280} maxSize={1600}>
+        <Stack flex={1}>
           <ViewportSurfaceView ref={viewportRef} onSurfaceEvent={onViewportSurfaceEvent} />
+        </Stack>
+        <Resizable edge="left" size={inspectorWidth} onResize={setInspectorWidth} minSize={220} maxSize={440}>
+          <Stack flex={1}>
+            <PanelSection title="Inputs">
+              <InputsPanel schema={inputSchema} values={inputValues} error={inputError} canReset={canResetInputs}
+                onChange={(path, value) => session?.changeInput(path, value)} onReset={() => session?.resetInputs()} />
+            </PanelSection>
+            <PanelSection title="Diagnostics">
+              <Panel surface="panel" flex={1} bordered>
+                {session && activeDocumentPath && isPython(activeDocumentPath) && lspStatus === "unavailable" ? (
+                  <Text tone="secondary">Python language server unavailable. Install pylsp in the project environment, then reopen the project.</Text>
+                ) : null}
+                {diagnostics.length === 0 ? (
+                  <Text tone="secondary">No diagnostics.</Text>
+                ) : (
+                  <ScrollView>
+                    {diagnostics.map((diagnostic, index) => (
+                      <Text key={index} variant="label" tone={diagnostic.severity === "error" ? "action" : "secondary"}>
+                        [{diagnostic.severity}] {diagnostic.message}
+                      </Text>
+                    ))}
+                  </ScrollView>
+                )}
+              </Panel>
+            </PanelSection>
+          </Stack>
         </Resizable>
-        <PanelSection title="Diagnostics">
-          <Panel surface="panel" flex={1} bordered>
-            {diagnostics.length === 0 ? (
-              <Text tone="secondary">No diagnostics.</Text>
-            ) : (
-              <ScrollView>
-                {diagnostics.map((diagnostic, index) => (
-                  <Text key={index} variant="label" tone={diagnostic.severity === "error" ? "action" : "secondary"}>
-                    [{diagnostic.severity}] {diagnostic.message}
-                  </Text>
-                ))}
-              </ScrollView>
-            )}
-          </Panel>
-        </PanelSection>
       </Stack>
     </Stack>
   );

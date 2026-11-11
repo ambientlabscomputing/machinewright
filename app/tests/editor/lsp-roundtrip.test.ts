@@ -53,7 +53,7 @@ function launchPylsp() {
 
 describe("pylsp wire protocol round-trip", () => {
   it(
-    "initializes and publishes a real diagnostic after didOpen",
+    "diagnoses an open document and completes a symbol in its unsaved buffer",
     async () => {
       const { child, send, nextMessage } = launchPylsp();
       try {
@@ -102,6 +102,25 @@ describe("pylsp wire protocol round-trip", () => {
         } while (params.diagnostics.length === 0);
         expect(params.uri).toBe(uri);
         expect(params.diagnostics.length).toBeGreaterThan(0);
+
+        send({
+          jsonrpc: "2.0",
+          method: "textDocument/didChange",
+          params: {
+            textDocument: { uri, version: 2 },
+            contentChanges: [{ text: "plate_width = 40\nplate_w" }],
+          },
+        });
+        send({
+          jsonrpc: "2.0",
+          id: 2,
+          method: "textDocument/completion",
+          params: { textDocument: { uri }, position: { line: 1, character: 7 } },
+        });
+        let completion = await nextMessage();
+        while (completion.id !== 2) completion = await nextMessage();
+        const result = completion.result as { items: { label: string }[] };
+        expect(result.items.some(({ label }) => label === "plate_width")).toBe(true);
       } finally {
         child.kill();
       }

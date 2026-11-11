@@ -145,10 +145,19 @@ failure events.
 ## Native editor
 
 The React Native macOS app opens a Machinewright project and edits its Python
-source. It evaluates unsaved changes through the project's Python worker,
+source with syntax highlighting, auto-indentation, folding, search, and
+Command-S to save. Project-local `pylsp` provides completions (Control-Space),
+hover documentation, Go to Definition (F12), and inline diagnostics.
+The Inputs panel exposes the active template's fields and re-evaluates the
+preview as you change values. Panel edits apply for the current session.
+Edit the project's input JSON to persist values.
+
+The editor evaluates unsaved changes through the project's Python worker,
 keeps the last valid snapshot if a newer evaluation fails, and links graph
-and viewport selection to source locations. For inline diagnostics, install
-`pylsp` in the project environment alongside `machinewright-worker`.
+and viewport selection to source locations. New starter projects include
+`pylsp` in their uv editor group. For an existing project, run
+`uv add --group editor "python-lsp-server[pyflakes,pycodestyle]"` and
+`uv sync --group editor`, then reopen the project in the app.
 
 With Xcode, CocoaPods, Node.js 24+, and uv installed, run from the
 Machinewright checkout:

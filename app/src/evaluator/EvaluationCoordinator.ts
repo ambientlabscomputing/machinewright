@@ -69,6 +69,7 @@ export interface EvaluationFailure {
 }
 
 export type EvaluationOutcome =
+  | { readonly kind: "inputSchema"; readonly schemaJson: Uint8Array }
   | { readonly kind: "completed"; readonly result: EvaluationResult }
   | { readonly kind: "failed"; readonly failure: EvaluationFailure }
   | { readonly kind: "cancelled"; readonly generation: bigint };
@@ -153,6 +154,7 @@ export class EvaluationCoordinator {
    * this on "was this a typing event" (that is exactly finding R2).
    */
   requestEvaluation(input: EvaluationInput): void {
+    if (this.disposed) return;
     this.pendingInput = input;
     if (this.debounceTimer !== null) clearTimeout(this.debounceTimer);
     this.debounceTimer = setTimeout(() => {
@@ -283,6 +285,7 @@ export class EvaluationCoordinator {
     this.setHealth({ phase: "spawning" });
     try {
       await this.transport.spawn(this.workerExecutablePath, [...this.workerArgs]);
+      if (this.disposed) return;
       this.setHealth({ phase: "handshaking" });
       await this.transport.send(
         create(WorkerRequestSchema, {
@@ -308,6 +311,13 @@ export class EvaluationCoordinator {
           this.trySubmitPending();
         } else if (this.lastSubmittedRequest !== null) {
           this.resubmitLast();
+        }
+        return;
+      }
+      case "inputSchema": {
+        const { value } = event.event;
+        if (value.sessionId === this.sessionId && value.generation === this.latestRequestedGeneration) {
+          this.emitOutcome({ kind: "inputSchema", schemaJson: value.schemaJson });
         }
         return;
       }

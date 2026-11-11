@@ -56,7 +56,7 @@ class MachinewrightLspModule: RCTEventEmitter {
     task.standardError = FileHandle.standardError
 
     task.terminationHandler = { [weak self] finishedTask in
-      guard let self else { return }
+      guard let self, self.process === finishedTask else { return }
       self.stdoutPipe?.fileHandleForReading.readabilityHandler = nil
       self.process = nil
       self.stdinPipe = nil
@@ -147,8 +147,12 @@ class MachinewrightLspModule: RCTEventEmitter {
     let header = "Content-Length: \(body.count)\r\n\r\n"
     var frame = Data(header.utf8)
     frame.append(body)
-    stdin.fileHandleForWriting.write(frame)
-    resolve(nil)
+    do {
+      try stdin.fileHandleForWriting.write(contentsOf: frame)
+      resolve(nil)
+    } catch {
+      reject("lsp_write_failed", error.localizedDescription, error)
+    }
   }
 
   @objc(stop:rejecter:)
@@ -160,6 +164,11 @@ class MachinewrightLspModule: RCTEventEmitter {
       resolve(nil)
       return
     }
+    stdoutPipe?.fileHandleForReading.readabilityHandler = nil
+    process = nil
+    stdinPipe = nil
+    stdoutPipe = nil
+    stdoutBuffer.removeAll()
     task.terminate()
     resolve(nil)
   }

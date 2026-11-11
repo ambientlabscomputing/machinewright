@@ -1,33 +1,7 @@
-/**
- * Minimal JSON-RPC client for a Python language server (RFD-19 "Editor
- * architecture": "LSP diagnostics, completion, hover, navigation, symbols,
- * and code actions"; RFD line 321, "LSP client behavior" is TypeScript-
- * application-owned). This spike implements only what's needed to prove
- * the mechanism end-to-end: initialize, didOpen/didChange, and
- * publishDiagnostics — completion/hover/navigation are real follow-up
- * work, not attempted here.
- *
- * Diagnostics are converted from LSP `Position` to Machinewright's
- * byte-offset `ByteRange` (src/protocol/surfaces/editor.ts) via
- * src/editor/offsets.ts before reaching the rest of the app, so nothing
- * downstream needs to know LSP uses UTF-16 line/character positions.
- *
- * R10 fix (deleted Rust UI review: "the LSP message limit does not bound a
- * silent server... a server that publishes nothing can block indefinitely").
- * `request()` below times out and rejects rather than waiting forever — a
- * language server that never responds to `initialize` must not hang
- * `start()` (and therefore the whole editor surface) indefinitely; the
- * caller can catch the rejection and surface a failed/degraded LSP status
- * instead. `didOpen`/`didChange` are already fire-and-forget notifications
- * (never awaiting a response), so a stuck request cannot block newer
- * document-change delivery either way — no separate pending-request cap is
- * needed for this client's current shape (only `initialize` ever awaits a
- * response), but one should be added here if a future capability adds a
- * second awaited request method.
- */
+/** JSON-RPC client for the project-local Python language server. */
 import { LspBridge } from "./LspBridge";
 import { lspPositionToUtf8ByteOffset, type LspPosition } from "./offsets";
-import type { EditorDiagnostic } from "../protocol/surfaces/editor";
+import type { EditorDiagnostic, LanguageQuery, LanguageResult } from "../protocol/surfaces/editor";
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";
@@ -66,9 +40,11 @@ export class LspClient {
     { resolve: (value: unknown) => void; reject: (error: Error) => void }
   >();
   private readonly openDocuments = new Map<string, { text: string; version: number }>();
+  private unsubscribeExit: (() => void) | null = null;
   private unsubscribeMessage: (() => void) | null = null;
 
-  onDiagnostics: ((uri: string, diagnostics: readonly EditorDiagnostic[]) => void) | null = null;
+  onDiagnostics: ((uri: string, text: string, diagnostics: readonly EditorDiagnostic[]) => void) | null = null;
+  onExit: (() => void) | null = null;
 
   constructor(options: { requestTimeoutMs?: number } = {}) {
     this.requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
@@ -76,13 +52,19 @@ export class LspClient {
 
   async start(executablePath: string, rootUri: string): Promise<void> {
     this.unsubscribeMessage = this.bridge.onMessage((message) => this.handleMessage(message));
+    this.unsubscribeExit = this.bridge.onExit(() => {
+      this.rejectPending();
+      this.onExit?.();
+    });
     await this.bridge.spawn(executablePath, []);
     await this.request("initialize", {
       processId: null,
       rootUri,
       capabilities: {
         textDocument: {
-          synchronization: { didSave: true },
+          synchronization: { didSave: false },
+          completion: { completionItem: { snippetSupport: false } },
+          hover: { contentFormat: ["plaintext", "markdown"] },
           publishDiagnostics: {},
         },
       },
@@ -93,10 +75,19 @@ export class LspClient {
   async stop(): Promise<void> {
     this.unsubscribeMessage?.();
     this.unsubscribeMessage = null;
+    this.unsubscribeExit?.();
+    this.unsubscribeExit = null;
+    this.rejectPending();
+    this.openDocuments.clear();
     await this.bridge.stop();
   }
 
   async didOpen(uri: string, languageId: string, text: string): Promise<void> {
+    const existing = this.openDocuments.get(uri);
+    if (existing) {
+      if (existing.text !== text) await this.didChange(uri, text);
+      return;
+    }
     this.openDocuments.set(uri, { text, version: 1 });
     await this.notify("textDocument/didOpen", {
       textDocument: { uri, languageId, version: 1, text },
@@ -113,6 +104,37 @@ export class LspClient {
     });
   }
 
+  async query(uri: string, query: LanguageQuery, position: LspPosition): Promise<LanguageResult> {
+    const params = { textDocument: { uri }, position };
+    if (query === "completion") {
+      type Item = { label: string; insertText?: string; detail?: string };
+      const response = await this.request("textDocument/completion", params) as
+        | Item[] | { items: Item[] } | null;
+      const items = Array.isArray(response) ? response : response?.items ?? [];
+      return {
+        kind: "completion",
+        options: items.slice(0, 200).map(({ label, insertText, detail }) => ({ label, insertText, detail })),
+      };
+    }
+    if (query === "hover") {
+      type Markup = string | { value: string };
+      const response = await this.request("textDocument/hover", params) as { contents: Markup | Markup[] } | null;
+      const contents = response?.contents ?? [];
+      const text = (Array.isArray(contents) ? contents : [contents])
+        .map((item) => typeof item === "string" ? item : item.value).join("\n\n");
+      return { kind: "hover", text };
+    }
+    type Location = { uri: string; range: { start: LspPosition } };
+    const response = await this.request("textDocument/definition", params) as Location | Location[] | null;
+    const location = Array.isArray(response) ? response[0] : response;
+    return location ? { kind: "definition", uri: location.uri, position: location.range.start } : null;
+  }
+
+  private rejectPending(): void {
+    for (const waiter of this.pending.values()) waiter.reject(new Error("Python language server stopped"));
+    this.pending.clear();
+  }
+
   private handleMessage(message: unknown): void {
     const parsed = message as Partial<JsonRpcResponse & JsonRpcRequest>;
     if (typeof parsed.id === "number" && (parsed.result !== undefined || parsed.error)) {
@@ -124,9 +146,9 @@ export class LspClient {
       return;
     }
     if (parsed.method === "textDocument/publishDiagnostics") {
-      const params = parsed.params as { uri: string; diagnostics: LspDiagnosticPayload[] };
+      const params = parsed.params as { uri: string; version?: number; diagnostics: LspDiagnosticPayload[] };
       const document = this.openDocuments.get(params.uri);
-      if (!document) return;
+      if (!document || (params.version !== undefined && params.version !== document.version)) return;
       const diagnostics = params.diagnostics.map(
         (diagnostic): EditorDiagnostic => ({
           source: "lsp",
@@ -138,11 +160,12 @@ export class LspClient {
           },
         }),
       );
-      this.onDiagnostics?.(params.uri, diagnostics);
+      this.onDiagnostics?.(params.uri, document.text, diagnostics);
     }
   }
 
   private request(method: string, params: unknown): Promise<unknown> {
+    if (this.pending.size >= 32) return Promise.reject(new Error("Too many pending Python language requests"));
     const id = this.nextId++;
     const payload: JsonRpcRequest = { jsonrpc: "2.0", id, method, params };
     return new Promise((resolve, reject) => {
@@ -164,7 +187,10 @@ export class LspClient {
           reject(error);
         },
       });
-      void this.bridge.send(payload);
+      void this.bridge.send(payload).catch((error: unknown) => {
+        this.pending.get(id)?.reject(error instanceof Error ? error : new Error(String(error)));
+        this.pending.delete(id);
+      });
     });
   }
 

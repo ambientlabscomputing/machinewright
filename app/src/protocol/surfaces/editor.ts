@@ -17,7 +17,16 @@
  * change" signal).
  */
 
+import type { LspPosition } from "../../editor/offsets";
+
 export type DocumentVersion = number;
+
+export type LanguageQuery = "completion" | "hover" | "definition";
+export type LanguageResult =
+  | { readonly kind: "completion"; readonly options: readonly { label: string; insertText?: string; detail?: string }[] }
+  | { readonly kind: "hover"; readonly text: string }
+  | { readonly kind: "definition"; readonly uri: string; readonly position: LspPosition }
+  | null;
 
 export interface DocumentIdentity {
   /** Project-relative path, POSIX-separated, matching SourceSpan.path. */
@@ -57,11 +66,21 @@ export type EditorHostCommand =
       readonly documentVersion: DocumentVersion;
       readonly diagnostics: readonly EditorDiagnostic[];
     }
-  | { readonly kind: "closeDocument"; readonly path: string };
+  | { readonly kind: "closeDocument"; readonly path: string }
+  | { readonly kind: "languageResult"; readonly id: number; readonly result: LanguageResult };
 
 /** Events the editor WebView emits back to the application shell. */
 export type EditorSurfaceEvent =
   | { readonly kind: "ready" }
+  | { readonly kind: "saveRequested"; readonly path: string }
+  | {
+      readonly kind: "languageQuery";
+      readonly id: number;
+      readonly path: string;
+      readonly documentVersion: DocumentVersion;
+      readonly query: LanguageQuery;
+      readonly position: LspPosition;
+    }
   | {
       readonly kind: "documentChanged";
       readonly path: string;

@@ -62,7 +62,7 @@ class MachinewrightWorkerModule: RCTEventEmitter {
     task.standardError = FileHandle.standardError
 
     task.terminationHandler = { [weak self] finishedTask in
-      guard let self else { return }
+      guard let self, self.process === finishedTask else { return }
       self.stdoutPipe?.fileHandleForReading.readabilityHandler = nil
       self.process = nil
       self.stdinPipe = nil
@@ -146,6 +146,11 @@ class MachinewrightWorkerModule: RCTEventEmitter {
       resolve(nil)
       return
     }
+    stdoutPipe?.fileHandleForReading.readabilityHandler = nil
+    process = nil
+    stdinPipe = nil
+    stdoutPipe = nil
+    stdoutBuffer.removeAll()
     task.terminate()
     resolve(nil)
   }
