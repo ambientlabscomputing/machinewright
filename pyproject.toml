@@ -1,6 +1,6 @@
 [project]
 name = "machinewright"
-version = "0.1.0-rc.8"
+version = "0.1.0-rc.9"
 description = "A parametric CAD framework: composable, parametrized hardware objects and assemblies as code."
 readme = "README.md"
 authors = [
