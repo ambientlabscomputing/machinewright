@@ -15,31 +15,33 @@
  * contrast validation" caveat that applies to every other token here.
  */
 export const colors = {
+  // Dark theme: a deep carbon base with soft, low-contrast neutrals.
+  // Neutrals are never pure black/white; hue stays slightly cool.
   surface: {
-    workspace: "#E8E9EB",
-    panel: "#F4F4F2",
-    control: "#FAFAF8",
-    display: "#202329",
+    workspace: "#16181B",
+    panel: "#1D2024",
+    control: "#262A30",
+    display: "#111315",
   },
   text: {
-    primary: "#25282D",
-    secondary: "#5D626A",
+    primary: "#D4D7DB",
+    secondary: "#8C929A",
   },
   border: {
-    subtle: "#C8CBD0",
+    subtle: "#363B42",
   },
+  // Highlight palette is restricted to: copper, PCB green, caution yellow,
+  // alarm red, and Cherenkov radiation blue.
   accent: {
-    action: "#F65B24",
-    selection: "#007EA8",
+    action: "#D17F4B", // copper
+    selection: "#5BB4FF", // Cherenkov blue
   },
-  // PLACEHOLDER — RFD-19 requires these be distinct semantic tokens but does
-  // not specify literal values; do not ship without design sign-off.
   status: {
-    success: "#2E7D4F",
-    warning: "#B26A00",
-    error: "#B3261E",
-    stale: "#8A8F98",
-    pending: "#5D626A",
+    success: "#3FA46E", // PCB green
+    warning: "#F0C02E", // caution yellow
+    error: "#E5484D", // alarm red
+    stale: "#6E747C",
+    pending: "#8C929A",
   },
 } as const;
 

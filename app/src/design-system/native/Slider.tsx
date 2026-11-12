@@ -108,5 +108,5 @@ export function Slider({ value, min, max, onChange, disabled = false, accessibil
 }
 
 function elevationForHandle(dragging: boolean): string {
-  return dragging ? "0 1px 2px rgba(37, 40, 45, 0.12)" : "none";
+  return dragging ? "0 1px 2px rgba(0, 0, 0, 0.35)" : "none";
 }

@@ -18,8 +18,8 @@ export const radius = {
  */
 export const elevation = {
   flat: "none",
-  control: "0 1px 2px rgba(37, 40, 45, 0.12)",
-  floating: "0 4px 12px rgba(37, 40, 45, 0.18)",
+  control: "0 1px 2px rgba(0, 0, 0, 0.35)",
+  floating: "0 4px 12px rgba(0, 0, 0, 0.5)",
 } as const;
 
 /** Short, state-communicating transitions only; honor reduced-motion. */

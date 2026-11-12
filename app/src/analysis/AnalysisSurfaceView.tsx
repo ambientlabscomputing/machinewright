@@ -12,6 +12,7 @@ import WebView from "react-native-webview";
 import type { WebViewMessageEvent } from "react-native-webview/lib/WebViewTypes";
 import { Stack, Text } from "../design-system/native";
 import { getBundledAssetURL } from "../native/BundledAssets";
+import { colors } from "../design-system/tokens/colors";
 import {
   serializeAnalysisHostCommand,
   deserializeAnalysisSurfaceEvent,
@@ -104,5 +105,5 @@ export const AnalysisSurfaceView = forwardRef<AnalysisSurfaceHandle, AnalysisSur
 );
 
 const styles = StyleSheet.create({
-  webview: { flex: 1 },
+  webview: { flex: 1, backgroundColor: colors.surface.panel },
 });

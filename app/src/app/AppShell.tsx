@@ -536,7 +536,7 @@ export function AppShell() {
   );
 
   return (
-    <Stack flex={1}>
+    <Panel surface="workspace" padding="none" flex={1}>
       <Panel surface="panel" padding="sm">
         <Stack direction="row" gap="sm" align="center">
           <Button label="Open Project" onPress={() => void openProject()} />
@@ -644,7 +644,7 @@ export function AppShell() {
           </Stack>
         </Resizable>
       </Stack>
-    </Stack>
+    </Panel>
   );
 }
 

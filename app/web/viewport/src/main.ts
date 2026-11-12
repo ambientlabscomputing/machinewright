@@ -9,6 +9,7 @@
  */
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import theme from "../../design-system/generated/viewport-theme.json";
 import { parseMwm } from "./mwm";
 import {
   deserializeViewportHostCommand,
@@ -30,7 +31,7 @@ function post(event: Parameters<typeof serializeViewportSurfaceEvent>[0]): void 
 // --- Scene setup -----------------------------------------------------------
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x202329); // surface.display token
+scene.background = new THREE.Color(theme["color-surface-display"]);
 
 const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 10000);
 camera.position.set(50, 50, 50);
@@ -47,7 +48,14 @@ scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 const directional = new THREE.DirectionalLight(0xffffff, 0.8);
 directional.position.set(1, 2, 3);
 scene.add(directional);
-scene.add(new THREE.AxesHelper(20));
+const axes = new THREE.AxesHelper(20);
+// Approved highlight palette only: copper (x), PCB green (y), Cherenkov blue (z).
+axes.setColors(
+  new THREE.Color(theme["color-accent-action"]),
+  new THREE.Color(theme["color-status-success"]),
+  new THREE.Color(theme["color-accent-selection"]),
+);
+scene.add(axes);
 
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -93,7 +101,7 @@ function buildMeshObject(staged: StagedMesh): THREE.Mesh {
   geometry.setAttribute("position", new THREE.BufferAttribute(staged.parsed.positions, 3));
   geometry.setAttribute("normal", new THREE.BufferAttribute(staged.parsed.normals, 3));
   geometry.setIndex(new THREE.BufferAttribute(staged.parsed.indices, 1));
-  const material = new THREE.MeshStandardMaterial({ color: 0xfafaf8, metalness: 0.1, roughness: 0.7 });
+  const material = new THREE.MeshStandardMaterial({ color: theme["color-text-primary"], metalness: 0.1, roughness: 0.7 });
   const mesh = new THREE.Mesh(geometry, material);
   mesh.userData.graphNodeId = staged.graphNodeId;
   return mesh;
@@ -247,7 +255,7 @@ function buildSyntheticMesh(triangleCount: number): THREE.Mesh {
   const geometry = new THREE.PlaneGeometry(cols, rows, cols, rows);
   geometry.computeVertexNormals();
   const material = new THREE.MeshStandardMaterial({
-    color: 0xfafaf8,
+    color: theme["color-text-primary"],
     metalness: 0.1,
     roughness: 0.7,
     side: THREE.DoubleSide,
@@ -334,7 +342,8 @@ window.addEventListener("message", (event: MessageEvent<string>) => {
         if (!(child instanceof THREE.Mesh)) continue;
         const material = child.material as THREE.MeshStandardMaterial;
         const selected = command.nodeIds.includes(child.userData.graphNodeId as string);
-        material.emissive.set(selected ? 0x007ea8 : 0x000000); // accent.selection token
+        material.emissive.set(selected ? theme["color-accent-selection"] : 0x000000);
+        material.emissiveIntensity = 0.45;
       }
       break;
     }

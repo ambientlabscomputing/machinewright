@@ -310,7 +310,7 @@ export function ViewportHost() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  webview: { flex: 1 },
+  webview: { flex: 1, backgroundColor: colors.surface.display },
   statusBar: {
     padding: 6,
     backgroundColor: colors.surface.panel,

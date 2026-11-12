@@ -13,7 +13,14 @@
   self.initialProps = @{};
   self.dependencyProvider = [RCTAppDependencyProvider new];
   
-  return [super applicationDidFinishLaunching:notification];
+  // Dark theme: keep native chrome (scrollbars, window frame, menus) in step.
+  [NSApp setAppearance:[NSAppearance appearanceNamed:NSAppearanceNameDarkAqua]];
+
+  [super applicationDidFinishLaunching:notification];
+
+  // Match the workspace surface token (#16181B) so no light window
+  // background shows through gaps between panels.
+  self.window.backgroundColor = [NSColor colorWithSRGBRed:0x16/255.0 green:0x18/255.0 blue:0x1B/255.0 alpha:1.0];
 }
 
 - (NSURL *)sourceURLForBridge:(RCTBridge *)bridge

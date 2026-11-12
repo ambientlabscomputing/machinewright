@@ -255,7 +255,7 @@ function App() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
+  root: { flex: 1, backgroundColor: colors.surface.workspace },
   tabBar: {
     flexDirection: "row",
     gap: 16,

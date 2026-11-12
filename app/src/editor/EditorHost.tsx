@@ -198,7 +198,7 @@ export function EditorHost() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  webview: { flex: 1 },
+  webview: { flex: 1, backgroundColor: colors.surface.panel },
   statusBar: {
     padding: 6,
     backgroundColor: colors.surface.panel,

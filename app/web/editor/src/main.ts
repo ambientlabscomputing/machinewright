@@ -10,14 +10,16 @@
  * duplicating that logic here.
  */
 import { EditorState } from "@codemirror/state";
+import { tags } from "@lezer/highlight";
 import { EditorView, keymap, lineNumbers, highlightActiveLine, hoverTooltip, type ViewUpdate } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { autocompletion, closeBrackets, closeBracketsKeymap, type CompletionContext } from "@codemirror/autocomplete";
-import { bracketMatching, defaultHighlightStyle, foldGutter, foldKeymap, indentOnInput, indentUnit, syntaxHighlighting } from "@codemirror/language";
+import { bracketMatching, HighlightStyle, foldGutter, foldKeymap, indentOnInput, indentUnit, syntaxHighlighting } from "@codemirror/language";
 import { searchKeymap } from "@codemirror/search";
 import { python, pythonLanguage } from "@codemirror/lang-python";
 import { setDiagnostics as cmSetDiagnostics, lintGutter, type Diagnostic as CmDiagnostic } from "@codemirror/lint";
 import { utf8ByteOffsetToStringIndex, stringIndexToUtf8ByteOffset, stringIndexToLspPosition } from "../../../src/editor/offsets";
+import theme from "../../design-system/generated/viewport-theme.json";
 import type { EditorHostCommand, EditorSurfaceEvent, LanguageQuery, LanguageResult } from "../../../src/protocol/surfaces/editor";
 
 declare global {
@@ -25,6 +27,76 @@ declare global {
     ReactNativeWebView?: { postMessage: (message: string) => void };
   }
 }
+
+// --- Theme (design tokens only; see src/design-system/tokens/colors.ts) ----
+
+const c = {
+  workspace: theme["color-surface-workspace"],
+  panel: theme["color-surface-panel"],
+  control: theme["color-surface-control"],
+  text: theme["color-text-primary"],
+  muted: theme["color-text-secondary"],
+  border: theme["color-border-subtle"],
+  copper: theme["color-accent-action"],
+  blue: theme["color-accent-selection"],
+  green: theme["color-status-success"],
+  yellow: theme["color-status-warning"],
+  red: theme["color-status-error"],
+};
+
+const editorTheme = EditorView.theme(
+  {
+    "&": { backgroundColor: c.panel, color: c.text, height: "100%" },
+    ".cm-content": { caretColor: c.blue },
+    ".cm-cursor, .cm-dropCursor": { borderLeftColor: c.blue },
+    "&.cm-focused": { outline: "none" },
+    ".cm-scroller": { backgroundColor: c.panel },
+    ".cm-gutters": { backgroundColor: c.panel, color: c.muted, border: "none", borderRight: `1px solid ${c.border}` },
+    ".cm-activeLine": { backgroundColor: `${c.control}99` },
+    ".cm-activeLineGutter": { backgroundColor: `${c.control}99`, color: c.text },
+    "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection":
+      { backgroundColor: `${c.blue}40` },
+    ".cm-selectionMatch": { backgroundColor: `${c.yellow}30` },
+    "&.cm-focused .cm-matchingBracket": { backgroundColor: `${c.blue}30`, outline: `1px solid ${c.blue}80` },
+    "&.cm-focused .cm-nonmatchingBracket": { backgroundColor: `${c.red}30` },
+    ".cm-foldPlaceholder": { backgroundColor: c.control, border: `1px solid ${c.border}`, color: c.muted },
+    ".cm-tooltip": { backgroundColor: c.control, color: c.text, border: `1px solid ${c.border}`, borderRadius: "4px" },
+    ".cm-tooltip .cm-tooltip-arrow:before, .cm-tooltip .cm-tooltip-arrow:after": { borderTopColor: "transparent", borderBottomColor: "transparent" },
+    ".cm-tooltip-autocomplete > ul > li[aria-selected]": { backgroundColor: `${c.blue}30`, color: c.text },
+    ".cm-completionDetail": { color: c.muted },
+    ".cm-completionMatchedText": { color: c.copper, textDecoration: "none" },
+    ".cm-tooltip.cm-tooltip-lint": { backgroundColor: c.control },
+    ".cm-diagnostic": { borderLeft: `3px solid ${c.blue}` },
+    ".cm-diagnostic-error": { borderLeftColor: c.red },
+    ".cm-diagnostic-warning": { borderLeftColor: c.yellow },
+    ".cm-diagnostic-info": { borderLeftColor: c.blue },
+    ".cm-lintRange-error": { backgroundImage: "none", textDecoration: `underline wavy ${c.red}` },
+    ".cm-lintRange-warning": { backgroundImage: "none", textDecoration: `underline wavy ${c.yellow}` },
+    ".cm-lintRange-info": { backgroundImage: "none", textDecoration: `underline wavy ${c.blue}` },
+    ".cm-panels": { backgroundColor: c.control, color: c.text },
+    ".cm-panels.cm-panels-top": { borderBottom: `1px solid ${c.border}` },
+    ".cm-searchMatch": { backgroundColor: `${c.yellow}30`, outline: `1px solid ${c.yellow}80` },
+    ".cm-searchMatch.cm-searchMatch-selected": { backgroundColor: `${c.copper}40` },
+    ".cm-textfield": { backgroundColor: c.panel, color: c.text, border: `1px solid ${c.border}` },
+    ".cm-button": { backgroundImage: "none", backgroundColor: c.panel, color: c.text, border: `1px solid ${c.border}` },
+  },
+  { dark: true },
+);
+
+// Syntax colors are restricted to the approved highlight palette:
+// copper, PCB green, caution yellow, alarm red, Cherenkov blue.
+const highlightStyle = HighlightStyle.define([
+  { tag: [tags.keyword, tags.controlKeyword, tags.moduleKeyword, tags.operatorKeyword, tags.definitionKeyword], color: c.copper },
+  { tag: [tags.string, tags.special(tags.string), tags.regexp], color: c.green },
+  { tag: [tags.number, tags.bool, tags.null, tags.atom], color: c.yellow },
+  { tag: [tags.function(tags.variableName), tags.function(tags.propertyName), tags.definition(tags.variableName), tags.definition(tags.function(tags.variableName))], color: c.blue },
+  { tag: [tags.className, tags.typeName, tags.namespace], color: c.blue },
+  { tag: [tags.self, tags.standard(tags.variableName), tags.special(tags.variableName)], color: c.copper },
+  { tag: [tags.comment, tags.lineComment, tags.blockComment], color: c.muted, fontStyle: "italic" },
+  { tag: [tags.meta, tags.annotation, tags.processingInstruction], color: c.yellow },
+  { tag: [tags.operator, tags.punctuation, tags.bracket, tags.separator], color: c.muted },
+  { tag: tags.invalid, color: c.red },
+]);
 
 function post(event: EditorSurfaceEvent): void {
   window.ReactNativeWebView?.postMessage(JSON.stringify(event));
@@ -122,6 +194,7 @@ const pythonHover = hoverTooltip(async (_view, pos) => {
 function buildExtensions(readOnly: boolean, path = "") {
   const isPython = /\.pyi?$/.test(path);
   return [
+    editorTheme,
     lineNumbers(),
     highlightActiveLine(),
     history(),
@@ -137,7 +210,7 @@ function buildExtensions(readOnly: boolean, path = "") {
     EditorView.updateListener.of(onUpdate),
     ...(isPython ? [
       python(),
-      syntaxHighlighting(defaultHighlightStyle),
+      syntaxHighlighting(highlightStyle),
       indentUnit.of("    "),
       indentOnInput(),
       bracketMatching(),
