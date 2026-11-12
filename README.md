@@ -154,10 +154,9 @@ Edit the project's input JSON to persist values.
 
 The editor evaluates unsaved changes through the project's Python worker,
 keeps the last valid snapshot if a newer evaluation fails, and links graph
-and viewport selection to source locations. New starter projects include
-`pylsp` in their uv editor group. For an existing project, run
-`uv add --group editor "python-lsp-server[pyflakes,pycodestyle]"` and
-`uv sync --group editor`, then reopen the project in the app.
+and viewport selection to source locations. `pylsp` is a core
+Machinewright dependency, so any project that depends on Machinewright has it in
+its `.venv` with no extra install step.
 
 With Xcode, CocoaPods, Node.js 24+, and uv installed, run from the
 Machinewright checkout:
