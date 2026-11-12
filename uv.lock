@@ -928,7 +928,7 @@ wheels = [
 
 [[package]]
 name = "machinewright"
-version = "0.1.0rc10"
+version = "0.1.0rc11"
 source = { editable = "." }
 dependencies = [
     { name = "cadquery" },
