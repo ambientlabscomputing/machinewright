@@ -8,3 +8,5 @@ export { Field, type FieldProps } from "./Field";
 export { NumericInput, type NumericInputProps } from "./NumericInput";
 export { Slider, type SliderProps } from "./Slider";
 export { Resizable, type ResizableProps, type ResizeEdge } from "./Resizable";
+export { TextField, type TextFieldProps } from "./TextField";
+export { Overlay, type OverlayProps } from "./Overlay";

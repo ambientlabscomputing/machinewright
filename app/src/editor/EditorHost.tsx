@@ -44,6 +44,8 @@ export interface EditorSurfaceHandle {
   setSelection(path: string, range: ByteRange): void;
   setDiagnostics(path: string, documentVersion: DocumentVersion, diagnostics: readonly EditorDiagnostic[]): void;
   closeDocument(path: string): void;
+  openFind(): void;
+  focus(): void;
   languageResult(id: number, result: LanguageResult): void;
 }
 
@@ -89,6 +91,8 @@ export const EditorSurfaceView = forwardRef<EditorSurfaceHandle, EditorSurfaceVi
         setDiagnostics: (path, documentVersion, diagnostics) =>
           post({ kind: "setDiagnostics", path, documentVersion, diagnostics }),
         closeDocument: (path) => post({ kind: "closeDocument", path }),
+        openFind: () => post({ kind: "openFind" }),
+        focus: () => post({ kind: "focus" }),
         languageResult: (id, result) => post({ kind: "languageResult", id, result }),
       }),
       [post],

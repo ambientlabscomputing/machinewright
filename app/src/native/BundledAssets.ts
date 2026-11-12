@@ -19,6 +19,25 @@ interface MachinewrightAssetsNativeModule {
   digestFile(path: string): Promise<string>;
   writeTextFileAtomically(path: string, contents: string): Promise<void>;
   listDirectory(path: string): Promise<DirectoryEntry[]>;
+  listFilesRecursive(root: string, ignoredNames: readonly string[], limit: number): Promise<string[]>;
+  searchInFiles(
+    root: string,
+    query: string,
+    caseSensitive: boolean,
+    ignoredNames: readonly string[],
+    maxResults: number,
+  ): Promise<TextMatch[]>;
+}
+
+/** One occurrence of a global-find query. `line` is 1-based; `column`/`length` are UTF-16 offsets within the line. */
+export interface TextMatch {
+  /** Project-root-relative POSIX path. */
+  readonly path: string;
+  readonly line: number;
+  readonly column: number;
+  readonly length: number;
+  /** The matching line, truncated to ~240 characters. */
+  readonly text: string;
 }
 
 function nativeModule(): MachinewrightAssetsNativeModule {
@@ -79,4 +98,38 @@ export function writeTextFileAtomically(path: string, contents: string): Promise
  */
 export function listDirectory(path: string): Promise<readonly DirectoryEntry[]> {
   return nativeModule().listDirectory(path);
+}
+
+/** Directories that quick-open and global find never descend into. */
+export const DEFAULT_IGNORED_DIRECTORIES: readonly string[] = [
+  ".git",
+  ".venv",
+  "node_modules",
+  "__pycache__",
+  ".machinewright",
+  ".mypy_cache",
+  ".ruff_cache",
+  ".pytest_cache",
+  ".DS_Store",
+  "dist",
+  "build",
+];
+
+/** Every regular file under `root` as root-relative POSIX paths (capped at `limit`). */
+export function listFilesRecursive(
+  root: string,
+  limit = 20000,
+  ignoredNames: readonly string[] = DEFAULT_IGNORED_DIRECTORIES,
+): Promise<string[]> {
+  return nativeModule().listFilesRecursive(root, ignoredNames, limit);
+}
+
+/** Plain-text search over the project's files, off the JS thread. */
+export function searchInFiles(
+  root: string,
+  query: string,
+  options: { readonly caseSensitive: boolean; readonly maxResults?: number },
+  ignoredNames: readonly string[] = DEFAULT_IGNORED_DIRECTORIES,
+): Promise<TextMatch[]> {
+  return nativeModule().searchInFiles(root, query, options.caseSensitive, ignoredNames, options.maxResults ?? 500);
 }

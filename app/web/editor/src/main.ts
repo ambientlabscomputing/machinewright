@@ -15,7 +15,7 @@ import { EditorView, keymap, lineNumbers, highlightActiveLine, hoverTooltip, typ
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { autocompletion, closeBrackets, closeBracketsKeymap, type CompletionContext } from "@codemirror/autocomplete";
 import { bracketMatching, HighlightStyle, foldGutter, foldKeymap, indentOnInput, indentUnit, syntaxHighlighting } from "@codemirror/language";
-import { searchKeymap } from "@codemirror/search";
+import { searchKeymap, openSearchPanel } from "@codemirror/search";
 import { python, pythonLanguage } from "@codemirror/lang-python";
 import { setDiagnostics as cmSetDiagnostics, lintGutter, type Diagnostic as CmDiagnostic } from "@codemirror/lint";
 import { utf8ByteOffsetToStringIndex, stringIndexToUtf8ByteOffset, stringIndexToLspPosition } from "../../../src/editor/offsets";
@@ -287,6 +287,15 @@ function handleCommand(command: EditorHostCommand): void {
     }
     case "closeDocument": {
       currentPath = null;
+      break;
+    }
+    case "openFind": {
+      view.focus();
+      openSearchPanel(view);
+      break;
+    }
+    case "focus": {
+      view.focus();
       break;
     }
   }

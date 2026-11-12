@@ -67,6 +67,10 @@ export type EditorHostCommand =
       readonly diagnostics: readonly EditorDiagnostic[];
     }
   | { readonly kind: "closeDocument"; readonly path: string }
+  /** Opens the in-file find panel (Cmd+F), seeded with the current selection if any. */
+  | { readonly kind: "openFind" }
+  /** Gives the editor surface DOM focus (the shell separately makes the WebView first responder). */
+  | { readonly kind: "focus" }
   | { readonly kind: "languageResult"; readonly id: number; readonly result: LanguageResult };
 
 /** Events the editor WebView emits back to the application shell. */

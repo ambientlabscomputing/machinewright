@@ -19,7 +19,13 @@ import type { RefObject } from "react";
 import { ScrollView } from "react-native";
 import { Button, Panel, Resizable, Stack, StatusBadge, Text } from "../design-system/native";
 import { WorkerBridge } from "../native/WorkerBridge";
-import { readTextFile, writeTextFileAtomically } from "../native/BundledAssets";
+import { listFilesRecursive, readTextFile, searchInFiles, writeTextFileAtomically, type TextMatch } from "../native/BundledAssets";
+import { watchProject } from "../native/ProjectWatcher";
+import { focusedSurface, focusSurface, onShortcut, setInterceptedChords, type Surface } from "../native/Shortcuts";
+import { CommandRegistry, type Command } from "../commands/registry";
+import { matchByteRange, validateNewFilePath } from "../commands/textPosition";
+import { CommandPalette, type PaletteHandle, type PaletteMode } from "./CommandPalette";
+import { TerminalPanel, type TerminalPanelHandle } from "./TerminalPanel";
 import { pickFile } from "../native/FilePicker";
 import { FileExplorer } from "./FileExplorer";
 import { openProjectFromPicker } from "../workspace/OpenProjectFlow";
@@ -109,7 +115,7 @@ export function AppShell() {
   const [inputError, setInputError] = useState<string | null>(null);
   const [canResetInputs, setCanResetInputs] = useState(false);
   const [lspStatus, setLspStatus] = useState<"starting" | "ready" | "unavailable">("starting");
-  const navigation = useRef<{ path: string; offset: number } | null>(null);
+  const navigation = useRef<{ path: string; offset: number; endOffset?: number } | null>(null);
   const [lspDiagnostics, setLspDiagnostics] = useState<readonly StructuredDiagnostic[]>([]);
 
   // Panel sizes are a UI preference, not machine-affecting state (RFD-19:
@@ -510,7 +516,7 @@ export function AppShell() {
     const target = navigation.current;
     if (target?.path === document.path) {
       navigation.current = null;
-      editorRef.current?.setSelection(target.path, { startByte: target.offset, endByte: target.offset });
+      editorRef.current?.setSelection(target.path, { startByte: target.offset, endByte: target.endOffset ?? target.offset });
     }
     const previous = session.pythonDiagnostics.get(document.path);
     const items = previous?.text === document.bufferContent ? previous.items : [];
@@ -535,10 +541,280 @@ export function AppShell() {
     [highlightNodeInEditor],
   );
 
+  // --- Command palette, keyboard shortcuts, in-window terminal -------------
+  // Shortcuts are intercepted natively (they must work while a WebView owns
+  // focus) and dispatched through one `CommandRegistry`; the palette lists
+  // the same registry. See src/commands and MachinewrightShortcutsModule.
+  const [palette, setPalette] = useState<{ mode: PaletteMode; nonce: number } | null>(null);
+  const paletteOpen = palette !== null;
+  const paletteOpenRef = useRef(false);
+  paletteOpenRef.current = paletteOpen;
+  const paletteRef = useRef<PaletteHandle>(null);
+  const paletteNonce = useRef(0);
+  const surfaceBeforePalette = useRef<Surface | null>(null);
+  const [projectFiles, setProjectFiles] = useState<readonly string[] | null>(null);
+  const [terminalMounted, setTerminalMounted] = useState(false);
+  const [terminalOpen, setTerminalOpen] = useState(false);
+  const [terminalHeight, setTerminalHeight] = useState(260);
+  const terminalRef = useRef<TerminalPanelHandle>(null);
+  const terminalOpenRef = useRef(false);
+  terminalOpenRef.current = terminalOpen;
+
+  const focusEditor = useCallback(() => {
+    void focusSurface("editor");
+    editorRef.current?.focus();
+  }, []);
+
+  const refreshProjectFiles = useCallback(() => {
+    if (!session) return;
+    listFilesRecursive(session.project.rootPath).then(
+      (paths) => {
+        if (sessionRef.current === session) setProjectFiles(paths);
+      },
+      () => {
+        if (sessionRef.current === session) setProjectFiles([]);
+      },
+    );
+  }, [session]);
+
+  useEffect(() => {
+    setProjectFiles(null);
+    refreshProjectFiles();
+  }, [refreshProjectFiles]);
+
+  // Stay live with the disk: files created/removed outside the app (the
+  // terminal, git, another editor) refresh the explorer and the quick-open
+  // index. Bursts (git checkout, npm install) are coalesced for the index.
+  const [fsChange, setFsChange] = useState<{ readonly paths: readonly string[] } | null>(null);
+  useEffect(() => {
+    if (!session) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const stop = watchProject(session.project.rootPath, (paths) => {
+      setFsChange({ paths });
+      clearTimeout(timer);
+      timer = setTimeout(refreshProjectFiles, 400);
+    });
+    return () => {
+      stop();
+      clearTimeout(timer);
+      setFsChange(null);
+    };
+  }, [session, refreshProjectFiles]);
+
+  const openPalette = useCallback((mode: PaletteMode) => {
+    const show = () => {
+      paletteNonce.current += 1;
+      setPalette({ mode, nonce: paletteNonce.current });
+    };
+    if (paletteOpenRef.current) {
+      show(); // re-trigger while open: just switch mode, keep the original focus target
+      return;
+    }
+    // Remember which surface had focus so closing the palette can hand it back.
+    focusedSurface().then(
+      (surface) => {
+        surfaceBeforePalette.current = surface;
+        show();
+      },
+      () => {
+        surfaceBeforePalette.current = null;
+        show();
+      },
+    );
+  }, []);
+
+  const closePalette = useCallback(
+    (restoreFocus = true) => {
+      setPalette(null);
+      if (!restoreFocus) return;
+      const surface = surfaceBeforePalette.current;
+      setTimeout(() => {
+        if (surface === "terminal" && terminalOpenRef.current) terminalRef.current?.focus();
+        else focusEditor();
+      }, 50);
+    },
+    [focusEditor],
+  );
+
+  const openFileFromPalette = useCallback(
+    async (relativePath: string, match?: TextMatch) => {
+      if (!session) return;
+      closePalette(false);
+      const absolute = defaultJoinPath(session.project.rootPath, relativePath);
+      try {
+        const document = await session.documentStore.open(absolute);
+        if (sessionRef.current !== session) return;
+        const range = match ? matchByteRange(document.bufferContent, match.line, match.column, match.length) : null;
+        if (range && absolute === activeDocumentPathRef.current) {
+          editorRef.current?.setSelection(absolute, range);
+        } else {
+          if (range) navigation.current = { path: absolute, offset: range.startByte, endOffset: range.endByte };
+          setDocuments(session.documentStore.listOpen());
+          setActiveDocumentPath(absolute);
+        }
+        setTimeout(focusEditor, 150);
+      } catch (error) {
+        setOpenError(`Could not open ${relativePath}: ${String(error)}`);
+      }
+    },
+    [session, closePalette, focusEditor],
+  );
+
+  const searchProjectText = useCallback(
+    (query: string) => {
+      if (!session) return Promise.resolve([]);
+      // Smart case: an upper-case letter in the query makes the search case-sensitive.
+      return searchInFiles(session.project.rootPath, query, { caseSensitive: /[A-Z]/.test(query) });
+    },
+    [session],
+  );
+
+  const createFile = useCallback(
+    async (input: string) => {
+      if (!session) throw new Error("Open a project first");
+      const relative = validateNewFilePath(input);
+      const absolute = defaultJoinPath(session.project.rootPath, relative);
+      let exists = true;
+      try {
+        await readTextFile(absolute);
+      } catch {
+        exists = false;
+      }
+      // Never overwrite: an existing file is simply opened.
+      if (!exists) await writeTextFileAtomically(absolute, "");
+      if (sessionRef.current !== session) return;
+      setProjectFiles((current) => (current && !current.includes(relative) ? [...current, relative] : current));
+      await openFileAtPath(absolute);
+      surfaceBeforePalette.current = "editor"; // the palette closes right after this resolves
+    },
+    [session, openFileAtPath],
+  );
+
+  const toggleTerminal = useCallback(() => {
+    if (terminalOpenRef.current) {
+      setTerminalOpen(false);
+      setTimeout(focusEditor, 50);
+    } else {
+      setTerminalMounted(true);
+      setTerminalOpen(true);
+    }
+  }, [focusEditor]);
+
+  // Whenever the terminal becomes visible it takes focus (deferred inside
+  // the panel until its surface has loaded, on first open).
+  useEffect(() => {
+    if (terminalOpen && terminalMounted) terminalRef.current?.focus();
+  }, [terminalOpen, terminalMounted]);
+
+  const hasProject = session !== null;
+  const hasActiveDocument = activeDocument !== null;
+  const activeDocumentDirty = activeDocument?.dirty === true;
+  const registry = useMemo(
+    () =>
+      new CommandRegistry([
+        {
+          id: "palette.commands",
+          category: "View",
+          title: "Show All Commands",
+          shortcut: "Cmd+Shift+P",
+          run: () => openPalette({ kind: "list", initialQuery: ">" }),
+        },
+        { id: "file.openProject", category: "File", title: "Open Project…", shortcut: "Cmd+O", run: () => openProject() },
+        {
+          id: "file.quickOpen",
+          category: "File",
+          title: "Go to File…",
+          shortcut: "Cmd+P",
+          run: () => {
+            refreshProjectFiles();
+            openPalette({ kind: "list", initialQuery: "" });
+          },
+        },
+        {
+          id: "file.new",
+          category: "File",
+          title: "New File…",
+          shortcut: "Cmd+N",
+          enabled: hasProject,
+          run: () =>
+            openPalette({
+              kind: "prompt",
+              title: "New file — path relative to the project root",
+              placeholder: "parts/bracket.py",
+              initialValue: "",
+              onSubmit: createFile,
+            }),
+        },
+        { id: "file.openFromDisk", category: "File", title: "Open File from Disk…", enabled: hasProject, run: () => openFile() },
+        { id: "file.save", category: "File", title: "Save File", enabled: activeDocumentDirty, run: () => saveActiveDocument() },
+        {
+          id: "find.inFile",
+          category: "Find",
+          title: "Find in File",
+          shortcut: "Cmd+F",
+          enabled: hasActiveDocument,
+          run: () => {
+            focusEditor();
+            editorRef.current?.openFind();
+          },
+        },
+        {
+          id: "find.inFiles",
+          category: "Find",
+          title: "Find in Files…",
+          shortcut: "Cmd+Shift+F",
+          run: () => openPalette({ kind: "list", initialQuery: "%" }),
+        },
+        { id: "terminal.toggle", category: "View", title: "Toggle Terminal", shortcut: "Cmd+J", run: toggleTerminal },
+        {
+          id: "terminal.clear",
+          category: "Terminal",
+          title: "Clear Terminal",
+          enabled: terminalMounted,
+          run: () => terminalRef.current?.clear(),
+        },
+        { id: "view.fitCamera", category: "View", title: "Fit Camera", enabled: hasProject, run: () => viewportRef.current?.fitCamera() },
+        { id: "worker.retry", category: "Worker", title: "Retry Worker", enabled: hasProject, run: () => session?.coordinator.retry() },
+      ]),
+    [
+      openPalette, openProject, refreshProjectFiles, createFile, openFile, saveActiveDocument, focusEditor,
+      toggleTerminal, hasProject, hasActiveDocument, activeDocumentDirty, terminalMounted, session,
+    ],
+  );
+  const registryRef = useRef(registry);
+  registryRef.current = registry;
+
+  const runPaletteCommand = useCallback(
+    (command: Command) => {
+      closePalette(false); // the command decides where focus goes next
+      Promise.resolve(command.run()).catch((error: unknown) => setOpenError(String(error)));
+    },
+    [closePalette],
+  );
+
+  useEffect(
+    () =>
+      onShortcut((chord) => {
+        if (paletteOpenRef.current) {
+          if (chord === "Escape") return closePalette();
+          if (chord === "Up") return paletteRef.current?.move(-1);
+          if (chord === "Down") return paletteRef.current?.move(1);
+        }
+        registryRef.current.runChord(chord).catch((error: unknown) => setOpenError(String(error)));
+      }),
+    [closePalette],
+  );
+
+  useEffect(() => {
+    setInterceptedChords([...registry.enabledShortcutChords(), ...(paletteOpen ? ["Escape", "Up", "Down"] : [])]);
+  }, [registry, paletteOpen]);
+  useEffect(() => () => setInterceptedChords([]), []);
+
   return (
     <Panel surface="workspace" padding="none" flex={1}>
       <Panel surface="panel" padding="sm">
         <Stack direction="row" gap="sm" align="center">
+          <Button label="Commands" onPress={() => void registry.run("palette.commands")} />
           <Button label="Open Project" onPress={() => void openProject()} />
           <Button label="Open File" onPress={() => void openFile()} disabled={!session} />
           <Button label="Save" onPress={saveActiveDocument} disabled={!activeDocument?.dirty} />
@@ -563,6 +839,7 @@ export function AppShell() {
         </Stack>
         {saveError ? <Text tone="primary">{saveError}</Text> : null}
       </Panel>
+      <Stack flex={1}>
       <Stack direction="row" flex={1}>
         <Resizable edge="right" size={explorerWidth} onResize={setExplorerWidth} minSize={180} maxSize={520}>
           <Stack flex={1}>
@@ -573,6 +850,7 @@ export function AppShell() {
                     rootPath={session.project.rootPath}
                     activeFilePath={activeDocumentPath}
                     onOpenFile={(path) => void openFileAtPath(path)}
+                    change={fsChange}
                   />
                 ) : (
                   <Panel surface="panel" flex={1} bordered>
@@ -644,6 +922,34 @@ export function AppShell() {
           </Stack>
         </Resizable>
       </Stack>
+      {terminalMounted ? (
+        <Resizable
+          edge="top"
+          size={terminalHeight}
+          onResize={setTerminalHeight}
+          minSize={120}
+          maxSize={700}
+          collapsed={!terminalOpen}
+        >
+          <TerminalPanel ref={terminalRef} cwd={session?.project.rootPath ?? ""} />
+        </Resizable>
+      ) : null}
+      </Stack>
+      {palette ? (
+        <CommandPalette
+          key={palette.nonce}
+          ref={paletteRef}
+          mode={palette.mode}
+          commands={registry.listEnabled()}
+          files={projectFiles}
+          hasProject={hasProject}
+          onClose={() => closePalette()}
+          onRunCommand={runPaletteCommand}
+          onOpenFile={(relativePath) => void openFileFromPalette(relativePath)}
+          onOpenMatch={(match) => void openFileFromPalette(match.path, match)}
+          onSearchText={searchProjectText}
+        />
+      ) : null}
     </Panel>
   );
 }

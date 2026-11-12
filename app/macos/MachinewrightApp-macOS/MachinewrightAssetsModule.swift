@@ -177,6 +177,104 @@ class MachinewrightAssetsModule: NSObject {
     }
   }
 
+  /// Every regular file under `root` as root-relative POSIX paths, skipping
+  /// any directory whose *name* is in `ignoredNames` (e.g. `.git`, `.venv`,
+  /// `node_modules`). Backs quick-open (Cmd+P); capped at `limit` entries so
+  /// a pathological tree cannot stall the bridge.
+  @objc(listFilesRecursive:ignoredNames:limit:resolver:rejecter:)
+  func listFilesRecursive(
+    _ root: String,
+    ignoredNames: [String],
+    limit: NSNumber,
+    resolver resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    let maxCount = limit.intValue
+    DispatchQueue.global(qos: .userInitiated).async {
+      var paths: [String] = []
+      MachinewrightAssetsModule.walkFiles(root: root, ignoredNames: Set(ignoredNames)) { relativePath, _ in
+        paths.append(relativePath)
+        return paths.count < maxCount
+      }
+      resolve(paths)
+    }
+  }
+
+  /// Plain-text search across the project (Cmd+Shift+F). Skips ignored
+  /// directories, files over 1 MB, and anything that looks binary (a NUL in
+  /// the first 8 KB). `column`/`length` are UTF-16 offsets within the line.
+  @objc(searchInFiles:query:caseSensitive:ignoredNames:maxResults:resolver:rejecter:)
+  func searchInFiles(
+    _ root: String,
+    query: String,
+    caseSensitive: Bool,
+    ignoredNames: [String],
+    maxResults: NSNumber,
+    resolver resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    let maxCount = maxResults.intValue
+    DispatchQueue.global(qos: .userInitiated).async {
+      var results: [[String: Any]] = []
+      if query.isEmpty { resolve(results); return }
+      let options: String.CompareOptions = caseSensitive ? [] : [.caseInsensitive]
+      MachinewrightAssetsModule.walkFiles(root: root, ignoredNames: Set(ignoredNames)) { relativePath, url in
+        guard let values = try? url.resourceValues(forKeys: [.fileSizeKey]),
+              (values.fileSize ?? 0) <= 1_000_000,
+              let data = try? Data(contentsOf: url, options: .mappedIfSafe),
+              !data.prefix(8000).contains(0),
+              let text = String(data: data, encoding: .utf8)
+        else { return true }
+        var lineNumber = 0
+        var keepGoing = true
+        text.enumerateLines { line, stop in
+          lineNumber += 1
+          var searchRange = line.startIndex..<line.endIndex
+          var perLine = 0
+          while perLine < 5, let found = line.range(of: query, options: options, range: searchRange) {
+            let column = line.utf16.distance(from: line.utf16.startIndex, to: found.lowerBound)
+            let length = line.utf16.distance(from: found.lowerBound, to: found.upperBound)
+            let trimmed = line.count > 240 ? String(line.prefix(240)) : line
+            results.append([
+              "path": relativePath, "line": lineNumber, "column": column, "length": length, "text": trimmed,
+            ])
+            perLine += 1
+            if results.count >= maxCount { keepGoing = false; stop = true; return }
+            searchRange = found.upperBound..<line.endIndex
+          }
+        }
+        return keepGoing
+      }
+      resolve(results)
+    }
+  }
+
+  /// Depth-first walk calling `visit(relativePath, url)` per regular file
+  /// until it returns false. Resolves symlinks in `root` once so relative
+  /// paths are well defined.
+  private static func walkFiles(
+    root: String,
+    ignoredNames: Set<String>,
+    visit: (String, URL) -> Bool
+  ) {
+    let rootURL = URL(fileURLWithPath: root).resolvingSymlinksInPath()
+    let prefix = rootURL.path.hasSuffix("/") ? rootURL.path : rootURL.path + "/"
+    guard let enumerator = FileManager.default.enumerator(
+      at: rootURL,
+      includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey],
+      options: []
+    ) else { return }
+    for case let url as URL in enumerator {
+      guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey]) else { continue }
+      if values.isDirectory == true {
+        if ignoredNames.contains(url.lastPathComponent) { enumerator.skipDescendants() }
+        continue
+      }
+      guard values.isRegularFile == true, url.path.hasPrefix(prefix) else { continue }
+      if !visit(String(url.path.dropFirst(prefix.count)), url) { return }
+    }
+  }
+
   private static func sha256Hex(data: Data) -> String {
     "sha256:" + SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
   }

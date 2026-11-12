@@ -28,4 +28,18 @@ RCT_EXTERN_METHOD(listDirectory:(NSString *)path
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(listFilesRecursive:(NSString *)root
+                  ignoredNames:(NSArray<NSString *> *)ignoredNames
+                  limit:(nonnull NSNumber *)limit
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(searchInFiles:(NSString *)root
+                  query:(NSString *)query
+                  caseSensitive:(BOOL)caseSensitive
+                  ignoredNames:(NSArray<NSString *> *)ignoredNames
+                  maxResults:(nonnull NSNumber *)maxResults
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
 @end
