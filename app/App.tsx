@@ -241,14 +241,16 @@ function App() {
           >
             Machinewright
           </Text>
-          <Text
-            onPress={() => setScreen("dev-tools")}
-            style={[styles.tab, screen === "dev-tools" && styles.tabActive]}
-          >
-            Dev Tools
-          </Text>
+          {__DEV__ ? (
+            <Text
+              onPress={() => setScreen("dev-tools")}
+              style={[styles.tab, screen === "dev-tools" && styles.tabActive]}
+            >
+              Dev Tools
+            </Text>
+          ) : null}
         </View>
-        {screen === "product" ? <AppShell /> : <DevTools />}
+        {__DEV__ && screen === "dev-tools" ? <DevTools /> : <AppShell />}
       </View>
     </SafeAreaProvider>
   );
