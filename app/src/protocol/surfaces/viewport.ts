@@ -25,6 +25,12 @@ export interface MeshRefLite {
   readonly digest: string;
   /** Scoped local resource URL into the content-addressed artifact cache. */
   readonly url: string;
+  /** Resolved material name of the part (graph `material_name`), used to color-code it. */
+  readonly materialName?: string | null;
+  /** `lib.materials.Process` of the material (PRINTED, MACHINED, PURCHASED, SHEET, OTHER); preferred over the name for classification. */
+  readonly materialProcess?: string | null;
+  /** Human-readable part label for the viewport's parts list. */
+  readonly label?: string;
 }
 
 /** Commands the application shell sends into the viewport WebView. */
@@ -44,6 +50,8 @@ export type ViewportHostCommand =
       readonly primaryNodeId: string | null;
     }
   | { readonly kind: "fitCamera" }
+  /** Tells the viewport whether the shell currently shows it maximized (drives its toggle's icon/label). */
+  | { readonly kind: "setMaximized"; readonly maximized: boolean }
   /**
    * B.7 performance-spike only: installs a procedurally generated mesh of
    * exactly `triangleCount` triangles directly into the scene, bypassing
@@ -58,6 +66,8 @@ export type ViewportHostCommand =
 /** Events the viewport WebView emits back to the application shell. */
 export type ViewportSurfaceEvent =
   | { readonly kind: "ready" }
+  /** The user pressed the viewport's maximize/restore toggle; the shell owns the layout and answers with `setMaximized`. */
+  | { readonly kind: "toggleMaximize" }
   | { readonly kind: "prepared"; readonly generation: Generation }
   | {
       readonly kind: "prepareFailed";
@@ -91,18 +101,24 @@ export type ViewportSurfaceEvent =
  */
 function hostCommandHasGeneration(
   command: ViewportHostCommand,
-): command is Exclude<ViewportHostCommand, { kind: "fitCamera" } | { kind: "benchmarkSynthetic" }> {
-  return command.kind !== "fitCamera" && command.kind !== "benchmarkSynthetic";
+): command is Exclude<
+  ViewportHostCommand,
+  { kind: "fitCamera" } | { kind: "setMaximized" } | { kind: "benchmarkSynthetic" }
+> {
+  return (
+    command.kind !== "fitCamera" && command.kind !== "setMaximized" && command.kind !== "benchmarkSynthetic"
+  );
 }
 
 function surfaceEventHasGeneration(
   event: ViewportSurfaceEvent,
 ): event is Exclude<
   ViewportSurfaceEvent,
-  { kind: "ready" } | { kind: "contextLost" } | { kind: "contextRestored" } | { kind: "benchmarkResult" }
+  { kind: "ready" } | { kind: "toggleMaximize" } | { kind: "contextLost" } | { kind: "contextRestored" } | { kind: "benchmarkResult" }
 > {
   return (
     event.kind !== "ready" &&
+    event.kind !== "toggleMaximize" &&
     event.kind !== "contextLost" &&
     event.kind !== "contextRestored" &&
     event.kind !== "benchmarkResult"

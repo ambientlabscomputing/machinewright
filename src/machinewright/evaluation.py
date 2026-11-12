@@ -414,8 +414,9 @@ def evaluate_project(
     cache_key = content_digest(
         {
             "template": [template_id, template_version],
-            # Revision 1 cached part-local meshes.
-            "viewport_mesh_revision": 2,
+            # Revision 1 cached part-local meshes; revision 2 cached snapshots
+            # without PartNode.material_process.
+            "viewport_mesh_revision": 3,
             "inputs": inputs,
             "project_source_digest": project_source_digest,
             "environment_digest": environment_digest,

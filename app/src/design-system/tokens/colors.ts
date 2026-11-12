@@ -36,6 +36,17 @@ export const colors = {
     action: "#D17F4B", // copper
     selection: "#5BB4FF", // Cherenkov blue
   },
+  // 3D viewport part coloring, keyed by material class (see
+  // web/viewport/src/materials.ts). Drawn only from the approved palette
+  // above: alarm red and Cherenkov blue are left out because they carry
+  // error and selection meaning in the viewport.
+  material: {
+    printed: "#3FA46E", // PCB green
+    machined: "#8C929A", // neutral metal
+    purchased: "#F0C02E", // caution yellow
+    sheet: "#D17F4B", // copper
+    other: "#D4D7DB", // unclassified / no material
+  },
   status: {
     success: "#3FA46E", // PCB green
     warning: "#F0C02E", // caution yellow

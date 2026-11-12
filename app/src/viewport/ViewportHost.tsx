@@ -51,6 +51,7 @@ export interface ViewportSurfaceHandle {
   discardSnapshot(generation: Generation): void;
   setSelection(generation: Generation, nodeIds: readonly string[], primaryNodeId: string | null): void;
   fitCamera(): void;
+  setMaximized(maximized: boolean): void;
 }
 
 export interface ViewportSurfaceViewProps {
@@ -102,6 +103,7 @@ export const ViewportSurfaceView = forwardRef<ViewportSurfaceHandle, ViewportSur
         setSelection: (generation, nodeIds, primaryNodeId) =>
           send({ kind: "setSelection", generation, nodeIds, primaryNodeId }),
         fitCamera: () => send({ kind: "fitCamera" }),
+        setMaximized: (maximized) => send({ kind: "setMaximized", maximized }),
       }),
       [send],
     );

@@ -16,7 +16,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RefObject } from "react";
-import { ScrollView } from "react-native";
+import { ScrollView, View } from "react-native";
 import { Button, Panel, Resizable, Stack, StatusBadge, Text } from "../design-system/native";
 import { WorkerBridge } from "../native/WorkerBridge";
 import { listFilesRecursive, readTextFile, searchInFiles, writeTextFileAtomically, type TextMatch } from "../native/BundledAssets";
@@ -128,6 +128,13 @@ export function AppShell() {
   const [inspectorWidth, setInspectorWidth] = useState(260);
 
   const viewportRef = useRef<ViewportSurfaceHandle>(null);
+  // Viewport-maximized layout: every other region is collapsed/hidden but
+  // stays mounted, so editor/terminal state (and the viewport's own scene)
+  // survive toggling.
+  const [viewportMaximized, setViewportMaximized] = useState(false);
+  useEffect(() => {
+    viewportRef.current?.setMaximized(viewportMaximized);
+  }, [viewportMaximized]);
   const editorRef = useRef<EditorSurfaceHandle>(null);
   const generationRef = useRef<bigint>(0n);
   // Read by closures registered once at session-build time (the LSP
@@ -489,13 +496,16 @@ export function AppShell() {
   const onViewportSurfaceEvent = useCallback(
     (event: ViewportSurfaceEvent) => {
       session?.dispatchViewportEvent(event);
+      if (event.kind === "toggleMaximize") setViewportMaximized((value) => !value);
+      // A freshly (re)loaded viewport surface has no layout state yet.
+      if (event.kind === "ready") viewportRef.current?.setMaximized(viewportMaximized);
       if (event.kind === "pickResult" && event.graphNodeId) {
         generationRef.current = event.generation;
         setSelection(selectionOfNode(event.graphNodeId));
         highlightNodeInEditor(event.graphNodeId);
       }
     },
-    [session, highlightNodeInEditor],
+    [session, highlightNodeInEditor, viewportMaximized],
   );
 
   // The other half of the "ready" handshake above: (re)loads the active
@@ -773,6 +783,13 @@ export function AppShell() {
           enabled: terminalMounted,
           run: () => terminalRef.current?.clear(),
         },
+        {
+          id: "view.toggleMaximizeViewport",
+          category: "View",
+          title: "Toggle Maximized Viewport",
+          enabled: true,
+          run: () => setViewportMaximized((value) => !value),
+        },
         { id: "view.fitCamera", category: "View", title: "Fit Camera", enabled: hasProject, run: () => viewportRef.current?.fitCamera() },
         { id: "worker.retry", category: "Worker", title: "Retry Worker", enabled: hasProject, run: () => session?.coordinator.retry() },
       ]),
@@ -812,6 +829,7 @@ export function AppShell() {
 
   return (
     <Panel surface="workspace" padding="none" flex={1}>
+      <View style={viewportMaximized ? { display: "none" } : null}>
       <Panel surface="panel" padding="sm">
         <Stack direction="row" gap="sm" align="center">
           <Button label="Commands" onPress={() => void registry.run("palette.commands")} />
@@ -839,9 +857,10 @@ export function AppShell() {
         </Stack>
         {saveError ? <Text tone="primary">{saveError}</Text> : null}
       </Panel>
+      </View>
       <Stack flex={1}>
       <Stack direction="row" flex={1}>
-        <Resizable edge="right" size={explorerWidth} onResize={setExplorerWidth} minSize={180} maxSize={520}>
+        <Resizable edge="right" size={explorerWidth} onResize={setExplorerWidth} minSize={180} maxSize={520} collapsed={viewportMaximized}>
           <Stack flex={1}>
             <Resizable edge="bottom" size={explorerHeight} onResize={setExplorerHeight} minSize={120} maxSize={800}>
               <PanelSection title="Files">
@@ -864,7 +883,7 @@ export function AppShell() {
             </PanelSection>
           </Stack>
         </Resizable>
-        <Resizable edge="right" size={editorWidth} onResize={setEditorWidth} minSize={280} maxSize={1400}>
+        <Resizable edge="right" size={editorWidth} onResize={setEditorWidth} minSize={280} maxSize={1400} collapsed={viewportMaximized}>
           <Stack flex={1}>
             {documents.length > 0 ? (
               <Panel surface="panel" padding="sm">
@@ -895,7 +914,7 @@ export function AppShell() {
         <Stack flex={1}>
           <ViewportSurfaceView ref={viewportRef} onSurfaceEvent={onViewportSurfaceEvent} />
         </Stack>
-        <Resizable edge="left" size={inspectorWidth} onResize={setInspectorWidth} minSize={220} maxSize={440}>
+        <Resizable edge="left" size={inspectorWidth} onResize={setInspectorWidth} minSize={220} maxSize={440} collapsed={viewportMaximized}>
           <Stack flex={1}>
             <PanelSection title="Inputs">
               <InputsPanel schema={inputSchema} values={inputValues} error={inputError} canReset={canResetInputs}
@@ -929,7 +948,7 @@ export function AppShell() {
           onResize={setTerminalHeight}
           minSize={120}
           maxSize={700}
-          collapsed={!terminalOpen}
+          collapsed={!terminalOpen || viewportMaximized}
         >
           <TerminalPanel ref={terminalRef} cwd={session?.project.rootPath ?? ""} />
         </Resizable>

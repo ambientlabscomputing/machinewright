@@ -987,6 +987,18 @@
           "default": null,
           "title": "Material Name"
         },
+        "material_process": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Material Process"
+        },
         "node_id": {
           "title": "Node Id",
           "type": "string"

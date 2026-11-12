@@ -90,6 +90,7 @@ export type PartNumber = string;
 export type Revision1 = string | null;
 export type SchemaVersion10 = "1.0";
 export type MaterialName = string | null;
+export type MaterialProcess = string | null;
 export type NodeId1 = string;
 export type ParameterDigest1 = string;
 export type Name = string;
@@ -309,6 +310,7 @@ export interface PartNode {
   kind?: Kind3;
   manufacturer_part?: ManufacturerPartIdentity | null;
   material_name?: MaterialName;
+  material_process?: MaterialProcess;
   node_id: NodeId1;
   parameter_digest: ParameterDigest1;
   parameters: Parameters;

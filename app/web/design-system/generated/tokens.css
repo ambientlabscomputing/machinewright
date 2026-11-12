@@ -8,6 +8,11 @@
   --mw-color-border-subtle: #363B42;
   --mw-color-accent-action: #D17F4B;
   --mw-color-accent-selection: #5BB4FF;
+  --mw-color-material-printed: #3FA46E;
+  --mw-color-material-machined: #8C929A;
+  --mw-color-material-purchased: #F0C02E;
+  --mw-color-material-sheet: #D17F4B;
+  --mw-color-material-other: #D4D7DB;
   --mw-color-status-success: #3FA46E;
   --mw-color-status-warning: #F0C02E;
   --mw-color-status-error: #E5484D;

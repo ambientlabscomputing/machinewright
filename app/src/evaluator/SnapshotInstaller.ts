@@ -19,13 +19,13 @@ import type { SnapshotStore } from "../model/SnapshotStore";
 import { buildProjectSnapshot } from "../model/ProjectSnapshot";
 import { fromEvaluationDiagnostics } from "../model/Diagnostics";
 import type { EvaluationSnapshot } from "../model/generated/EvaluationSnapshot";
-import type { ViewportSurfaceEvent } from "../protocol/surfaces/viewport";
+import type { MeshRefLite, ViewportSurfaceEvent } from "../protocol/surfaces/viewport";
 
 export interface ViewportSurfacePort {
   prepareSnapshot(command: {
     generation: bigint;
     artifactManifestDigest: string;
-    meshes: readonly { graphNodeId: string; digest: string; url: string }[];
+    meshes: readonly MeshRefLite[];
   }): void;
   commitSnapshot(generation: bigint): void;
   discardSnapshot(generation: bigint): void;
@@ -46,7 +46,7 @@ export class SnapshotInstaller {
   private readonly loadEvaluationSnapshot: (snapshotPath: string) => Promise<EvaluationSnapshot>;
   private readonly unsubscribeViewport: () => void;
   private readonly pendingRaw = new Map<bigint, EvaluationSnapshot>();
-  private readonly pendingMeshes = new Map<bigint, readonly { graphNodeId: string; digest: string; url: string }[]>();
+  private readonly pendingMeshes = new Map<bigint, readonly MeshRefLite[]>();
 
   constructor(options: SnapshotInstallerOptions) {
     this.viewport = options.viewport;
@@ -82,7 +82,7 @@ export class SnapshotInstaller {
   stagePreloaded(
     generation: bigint,
     raw: EvaluationSnapshot,
-    meshes: readonly { graphNodeId: string; digest: string; url: string }[],
+    meshes: readonly MeshRefLite[],
     artifactManifestDigest: string,
   ): void {
     this.snapshotStore.setPending(generation);
@@ -92,13 +92,26 @@ export class SnapshotInstaller {
   private stagePrepared(
     generation: bigint,
     raw: EvaluationSnapshot,
-    meshes: readonly { graphNodeId: string; digest: string; url: string }[],
+    meshes: readonly MeshRefLite[],
     artifactManifestDigest: string,
   ): void {
+    // Part metadata the viewport needs for color-coding and its parts list
+    // lives on the graph, not the mesh manifest, so join it in here.
+    const partInfo = new Map<string, { materialName: string | null; materialProcess: string | null; label: string }>();
+    for (const node of raw.graph.nodes) {
+      if (node.kind === "part") {
+        partInfo.set(node.node_id, {
+          materialName: node.material_name ?? null,
+          materialProcess: node.material_process ?? null,
+          label: node.instance_key,
+        });
+      }
+    }
+    const enriched = meshes.map((mesh) => ({ ...mesh, ...partInfo.get(mesh.graphNodeId) }));
     // Stash raw/meshes for use once "prepared" arrives.
     this.pendingRaw.set(generation, raw);
-    this.pendingMeshes.set(generation, meshes);
-    this.viewport.prepareSnapshot({ generation, artifactManifestDigest, meshes });
+    this.pendingMeshes.set(generation, enriched);
+    this.viewport.prepareSnapshot({ generation, artifactManifestDigest, meshes: enriched });
   }
 
   dispose(): void {

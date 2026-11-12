@@ -11,6 +11,8 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import theme from "../../design-system/generated/viewport-theme.json";
 import { parseMwm } from "./mwm";
+import { materialClass, type MaterialClass } from "./materials";
+import { createViewportPanel, EXPLODE_SCALE_DEFAULT, type PanelPart, type ViewMode } from "./panel";
 import {
   deserializeViewportHostCommand,
   serializeViewportSurfaceEvent,
@@ -87,6 +89,9 @@ renderer.domElement.addEventListener("webglcontextrestored", () => {
 
 interface StagedMesh {
   readonly graphNodeId: string;
+  readonly label: string;
+  readonly materialName: string | null;
+  readonly materialProcess: string | null;
   readonly parsed: ReturnType<typeof parseMwm>;
 }
 
@@ -101,26 +106,137 @@ function buildMeshObject(staged: StagedMesh): THREE.Mesh {
   geometry.setAttribute("position", new THREE.BufferAttribute(staged.parsed.positions, 3));
   geometry.setAttribute("normal", new THREE.BufferAttribute(staged.parsed.normals, 3));
   geometry.setIndex(new THREE.BufferAttribute(staged.parsed.indices, 1));
-  const material = new THREE.MeshStandardMaterial({ color: theme["color-text-primary"], metalness: 0.1, roughness: 0.7 });
+  const cls = materialClass(staged.materialName, staged.materialProcess);
+  const material = new THREE.MeshStandardMaterial({ color: theme[`color-material-${cls}`], metalness: 0.1, roughness: 0.7 });
   const mesh = new THREE.Mesh(geometry, material);
   mesh.userData.graphNodeId = staged.graphNodeId;
+  mesh.userData.label = staged.label;
+  mesh.userData.materialName = staged.materialName;
+  mesh.userData.materialProcess = staged.materialProcess;
+  mesh.userData.materialClass = cls;
+  // Geometry is already in world space, so exploding is a pure translation.
+  mesh.visible = !hiddenNodeIds.has(staged.graphNodeId);
+  // Keep the parsed CPU-side data attached so a later context-loss
+  // rebuild doesn't need to re-fetch (see rebuildCommittedGroupFromCache).
+  geometry.userData.parsed = staged.parsed;
   return mesh;
+}
+
+// --- View state: exploded view + per-part visibility ------------------------
+//
+// Both are presentation state owned by the viewport (like the camera), so
+// they survive new snapshot generations: hidden parts are tracked by graph
+// node id and re-applied whenever a group is built.
+
+const hiddenNodeIds = new Set<string>();
+let viewMode: ViewMode = "assembled";
+let explodeProgress = 0; // 0 = assembled, 1 = fully exploded; eased toward the target in animate()
+// Per-axis multiplier on each part's unscaled offset from the assembly center (panel sliders).
+const explodeScale = new THREE.Vector3().setScalar(EXPLODE_SCALE_DEFAULT);
+
+const panel = createViewportPanel(theme, {
+  onModeChange: (mode) => {
+    viewMode = mode;
+  },
+  onVisibilityChange: (ids, visible) => {
+    for (const id of ids) {
+      if (visible) hiddenNodeIds.delete(id);
+      else hiddenNodeIds.add(id);
+    }
+    applyVisibility();
+  },
+  onExplodeScaleChange: (axis, value) => {
+    explodeScale[axis] = value;
+    applyExplodeProgress();
+  },
+  onToggleMaximize: () => post({ kind: "toggleMaximize" }),
+});
+
+let maximized = false;
+// Escape leaves the maximized layout (the shell owns it; just ask).
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && maximized) post({ kind: "toggleMaximize" });
+});
+
+function meshesOf(group: THREE.Group | null): THREE.Mesh[] {
+  return group ? group.children.filter((child): child is THREE.Mesh => child instanceof THREE.Mesh) : [];
+}
+
+function applyVisibility(): void {
+  for (const mesh of meshesOf(committedGroup)) {
+    mesh.visible = !hiddenNodeIds.has(mesh.userData.graphNodeId as string);
+  }
+  panel.setHidden(hiddenNodeIds);
+}
+
+/**
+ * Offsets each part away from the assembly center, proportional to its own
+ * distance from it (scaled per axis by `explodeScale` when applied). Computed from *all* parts (visible or not) so hiding a
+ * part never shifts the others. Parts that sit at the very center (nested
+ * or coaxial with identical centers) are fanned out along z instead, so
+ * they still separate.
+ */
+function computeExplodeOffsets(group: THREE.Group): void {
+  const meshes = meshesOf(group);
+  const centers = meshes.map((mesh) => {
+    mesh.geometry.computeBoundingBox();
+    return mesh.geometry.boundingBox!.getCenter(new THREE.Vector3());
+  });
+  const overall = new THREE.Box3();
+  for (const mesh of meshes) overall.union(mesh.geometry.boundingBox!);
+  if (overall.isEmpty()) return;
+  const center = overall.getCenter(new THREE.Vector3());
+  const size = overall.getSize(new THREE.Vector3());
+  const epsilon = Math.max(size.x, size.y, size.z) * 0.02;
+  let fanIndex = 0;
+  meshes.forEach((mesh, index) => {
+    const offset = centers[index].clone().sub(center);
+    if (offset.length() < epsilon) {
+      fanIndex += 1;
+      // Pre-divided by the default scale so the default look is unchanged.
+      offset.set(0, 0, (fanIndex * size.z * 0.25) / EXPLODE_SCALE_DEFAULT);
+    }
+    mesh.userData.explodeOffset = offset;
+  });
+}
+
+function applyExplodeProgress(): void {
+  for (const mesh of meshesOf(committedGroup)) {
+    const offset = mesh.userData.explodeOffset as THREE.Vector3 | undefined;
+    if (offset) mesh.position.copy(offset).multiply(explodeScale).multiplyScalar(explodeProgress);
+  }
+}
+
+function syncPanelParts(): void {
+  const parts: PanelPart[] = meshesOf(committedGroup).map((mesh) => ({
+    id: mesh.userData.graphNodeId as string,
+    label: mesh.userData.label as string,
+    materialClass: mesh.userData.materialClass as MaterialClass,
+  }));
+  panel.setParts(parts, hiddenNodeIds);
 }
 
 function rebuildCommittedGroupFromCache(): void {
   if (!committedGroup) return;
   const rebuilt = new THREE.Group();
-  for (const child of committedGroup.children) {
-    if (!(child instanceof THREE.Mesh)) continue;
-    const graphNodeId = child.userData.graphNodeId as string;
+  for (const child of meshesOf(committedGroup)) {
     // Positions/normals/indices are still valid JS-heap data even after a
     // GPU context loss (only the uploaded buffers are gone) — nothing to
     // re-fetch, just re-upload by constructing fresh THREE objects.
-    rebuilt.add(buildMeshObject({ graphNodeId, parsed: (child.geometry as THREE.BufferGeometry).userData.parsed }));
+    const mesh = buildMeshObject({
+      graphNodeId: child.userData.graphNodeId as string,
+      label: child.userData.label as string,
+      materialName: child.userData.materialName as string | null,
+      materialProcess: child.userData.materialProcess as string | null,
+      parsed: (child.geometry as THREE.BufferGeometry).userData.parsed,
+    });
+    mesh.userData.explodeOffset = child.userData.explodeOffset;
+    rebuilt.add(mesh);
   }
   scene.remove(committedGroup);
   committedGroup = rebuilt;
   scene.add(committedGroup);
+  applyExplodeProgress();
 }
 
 /**
@@ -164,7 +280,13 @@ async function handlePrepareSnapshot(
           parsed = parseMwm(await loadArrayBuffer(ref.url));
           meshCache.set(ref.url, parsed);
         }
-        entry.loaded.push({ graphNodeId: ref.graphNodeId, parsed });
+        entry.loaded.push({
+          graphNodeId: ref.graphNodeId,
+          label: ref.label ?? ref.graphNodeId,
+          materialName: ref.materialName ?? null,
+          materialProcess: ref.materialProcess ?? null,
+          parsed,
+        });
       } catch (error) {
         entry.failed = true;
         if (isStaleGeneration(committedGeneration, generation) === false) {
@@ -203,14 +325,13 @@ function handleCommitSnapshot(generation: bigint): void {
 
   const group = new THREE.Group();
   for (const staged of entry.loaded) {
-    const mesh = buildMeshObject(staged);
-    // Keep the parsed CPU-side data attached so a later context-loss
-    // rebuild doesn't need to re-fetch (see rebuildCommittedGroupFromCache).
-    (mesh.geometry as THREE.BufferGeometry).userData.parsed = staged.parsed;
-    group.add(mesh);
+    group.add(buildMeshObject(staged));
   }
+  computeExplodeOffsets(group);
   scene.add(group);
   committedGroup = group;
+  applyExplodeProgress();
+  syncPanelParts();
   committedGeneration = generation;
   staging.delete(key);
 
@@ -227,7 +348,12 @@ function handleDiscardSnapshot(generation: bigint): void {
 }
 
 function fitCameraToGroup(group: THREE.Group): void {
-  const box = new THREE.Box3().setFromObject(group);
+  // Fit what is actually on screen: visible parts at their current
+  // (possibly exploded) positions, falling back to everything if all are hidden.
+  const meshes = meshesOf(group);
+  const shown = meshes.filter((mesh) => mesh.visible);
+  const box = new THREE.Box3();
+  for (const mesh of shown.length > 0 ? shown : meshes) box.expandByObject(mesh);
   if (box.isEmpty()) return;
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
@@ -312,7 +438,8 @@ renderer.domElement.addEventListener("click", (event) => {
   pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
   pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
   raycaster.setFromCamera(pointer, camera);
-  const hits = raycaster.intersectObjects(committedGroup.children, false);
+  // Raycaster does not skip hidden objects, so filter them out explicitly.
+  const hits = raycaster.intersectObjects(meshesOf(committedGroup).filter((mesh) => mesh.visible), false);
   const hit = hits[0]?.object;
   post({
     kind: "pickResult",
@@ -347,6 +474,10 @@ window.addEventListener("message", (event: MessageEvent<string>) => {
       }
       break;
     }
+    case "setMaximized":
+      maximized = command.maximized;
+      panel.setMaximized(maximized);
+      break;
     case "fitCamera":
       if (committedGroup) fitCameraToGroup(committedGroup);
       break;
@@ -360,6 +491,12 @@ window.addEventListener("message", (event: MessageEvent<string>) => {
 
 function animate(): void {
   requestAnimationFrame(animate);
+  const target = viewMode === "exploded" ? 1 : 0;
+  if (explodeProgress !== target) {
+    const next = explodeProgress + (target - explodeProgress) * 0.15;
+    explodeProgress = Math.abs(target - next) < 0.001 ? target : next;
+    applyExplodeProgress();
+  }
   controls.update();
   renderer.render(scene, camera);
 }

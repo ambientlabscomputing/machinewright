@@ -136,6 +136,10 @@ class PartNode(Contract):
     geometry: GeometryProperties
     manufacturer_part: ManufacturerPartIdentity | None = None
     material_name: str | None = None
+    # `lib.materials.Process` value of the part's material (PRINTED, MACHINED,
+    # PURCHASED, SHEET, OTHER); lets consumers classify parts without
+    # guessing from free-form material names.
+    material_process: str | None = None
     process: ProcessSpec | None = None
     finishes: tuple[FinishRequirement, ...] = ()
     inspections: tuple[InspectionRequirement, ...] = ()
@@ -721,6 +725,9 @@ def resolve_hardware(  # noqa: C901 - recursive graph resolution pipeline
                     geometry=geometry,
                     manufacturer_part=description["manufacturer_part"],
                     material_name=material.name if material is not None else None,
+                    material_process=(
+                        material.process.value if material is not None else None
+                    ),
                     process=description["process"],
                     finishes=description["finishes"],
                     inspections=description["inspections"],
