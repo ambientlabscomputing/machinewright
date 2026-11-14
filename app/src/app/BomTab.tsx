@@ -26,6 +26,7 @@ import {
   parseCanonicalBom,
   parseProcurement,
   procurementFor,
+  PROCUREMENT_FILE,
   procurementPath,
   serializeProcurement,
   updateProcurement,
@@ -51,6 +52,8 @@ export interface BomTabProps {
   /** The CSV (BOM + sourcing) is written by the worker, from the same code the CLI uses. */
   readonly coordinator: ExportCoordinator;
   readonly buildJobInput: (kind: ExportJobKind, outputDirectory: string, options: unknown, basename: string) => ExportJobInput | null;
+  /** Latest batch of changed project-relative paths from the filesystem watcher (null before any). */
+  readonly fsChange?: { readonly paths: readonly string[] } | null;
 }
 
 const EDGE = 12;
@@ -110,7 +113,7 @@ function CostField({ value, onChange }: { readonly value: number | null; readonl
   );
 }
 
-export function BomTab({ projectId, projectRoot, outputDirectory, graphDigest, onShowInViewport, coordinator, buildJobInput }: BomTabProps) {
+export function BomTab({ projectId, projectRoot, outputDirectory, graphDigest, onShowInViewport, coordinator, buildJobInput, fsChange = null }: BomTabProps) {
   const [data, setData] = useState<ProcurementData>(EMPTY_PROCUREMENT_DATA);
   const [loaded, setLoaded] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
@@ -158,16 +161,47 @@ export function BomTab({ projectId, projectRoot, outputDirectory, graphDigest, o
   }, [graphDigest, loaded, projectRoot]);
 
   // Only write once the file has been read (never clobber it with defaults) and only after real edits.
+  // `dirty` stays true from the first edit until its write lands, so an external change arriving in
+  // that window never overwrites what the user just typed. `lastWritten` lets the watcher recognise
+  // our own writes and ignore them.
   const dirty = useRef(false);
+  const lastWritten = useRef<string | null>(null);
   useEffect(() => {
     if (!loaded || !dirty.current) return;
     const timer = setTimeout(() => {
-      writeTextFileAtomically(procurementPath(projectRoot), serializeProcurement(data)).catch((error: unknown) =>
-        setNotice({ tone: "error", text: `Could not save procurement data: ${String(error)}`, reveal: null }),
+      const text = serializeProcurement(data);
+      lastWritten.current = text;
+      writeTextFileAtomically(procurementPath(projectRoot), text).then(
+        () => {
+          if (lastWritten.current === text) dirty.current = false;
+        },
+        (error: unknown) => setNotice({ tone: "error", text: `Could not save procurement data: ${String(error)}`, reveal: null }),
       );
     }, 400);
     return () => clearTimeout(timer);
   }, [loaded, projectRoot, data]);
+
+  // Stay fresh with the disk: when `bom-procurement.json` changes outside the app (an agent, the
+  // CLI, git, an editor tab), reload it. Our own writes and in-flight edits are skipped.
+  useEffect(() => {
+    if (!fsChange || !loaded) return;
+    if (!fsChange.paths.some((path) => path === PROCUREMENT_FILE)) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      readTextFile(procurementPath(projectRoot))
+        .catch(() => null)
+        .then((text) => {
+          if (cancelled || !mounted.current || text === null) return;
+          if (dirty.current || text === lastWritten.current) return;
+          lastWritten.current = text;
+          setData(parseProcurement(text));
+        });
+    }, 150);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [fsChange, loaded, projectRoot]);
 
   const edit = useCallback((key: string, patch: Partial<Procurement>) => {
     dirty.current = true;
@@ -200,7 +234,10 @@ export function BomTab({ projectId, projectRoot, outputDirectory, graphDigest, o
     if (directory === null) return;
     try {
       // The worker reads the procurement file from disk, so save pending edits first.
-      await writeTextFileAtomically(procurementPath(projectRoot), serializeProcurement(data));
+      const saved = serializeProcurement(data);
+      lastWritten.current = saved;
+      await writeTextFileAtomically(procurementPath(projectRoot), saved);
+      dirty.current = false;
       const input = buildJobInput("bom_sourcing", directory, { project_root: projectRoot }, exportStem(projectId));
       if (!input) throw new Error("The project is not ready yet.");
       const outcome = await coordinator.run(input, () => {}).outcome;

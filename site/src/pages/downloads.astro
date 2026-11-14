@@ -1,0 +1,88 @@
+---
+import Site from '../layouts/Site.astro';
+import { getReleases, humanSize, repoUrl } from '../lib/releases';
+
+const { releases } = await getReleases();
+const stable = releases.filter((r) => !r.prerelease);
+const latest = stable[0];
+const date = (s: string) => new Date(s).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+const base = import.meta.env.BASE_URL;
+---
+<Site title="Downloads — Machinewright" description="Download Machinewright for macOS. Every release, by version, straight from GitHub.">
+  <style>
+    .page { padding: 4rem 0 0; }
+    h1 { font-size: clamp(2rem, 4.4vw, 3rem); letter-spacing: -.03em; margin: 0 0 .5rem; }
+    .lead { color: var(--mw-muted); max-width: 62ch; margin: 0 0 2.2rem; }
+    .hero-card { display: flex; justify-content: space-between; align-items: center; gap: 1.5rem; flex-wrap: wrap; padding: 1.8rem; border: 1px solid var(--mw-line); border-radius: 16px; background: var(--mw-surface); }
+    .hero-card h2 { margin: 0 0 .25rem; font-size: 1.4rem; }
+    .meta { color: var(--mw-muted); font-size: .9rem; }
+    .note { margin-top: 1.2rem; padding: 1rem 1.2rem; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--mw-amber) 55%, var(--mw-line)); background: color-mix(in srgb, var(--mw-amber) 10%, var(--mw-surface)); font-size: .92rem; }
+    .note code, td code { font-family: var(--sl-font-mono); font-size: .85em; }
+    h2.sec { margin: 3.2rem 0 1rem; font-size: 1.4rem; letter-spacing: -.02em; }
+    .rel { border: 1px solid var(--mw-line); border-radius: 14px; background: var(--mw-surface); margin-bottom: 1rem; }
+    .rel > summary { list-style: none; display: flex; align-items: center; gap: .9rem; padding: 1rem 1.3rem; cursor: pointer; }
+    .rel > summary::-webkit-details-marker { display: none; }
+    .rel .v { font-weight: 700; font-size: 1.05rem; }
+    .tag { font-size: .72rem; font-weight: 650; padding: .15rem .55rem; border-radius: 99px; background: var(--sl-color-accent-low); color: var(--sl-color-accent-high); }
+    .tag.pre { background: color-mix(in srgb, var(--mw-amber) 25%, transparent); color: var(--mw-ink); }
+    .rel .d { margin-left: auto; color: var(--mw-muted); font-size: .88rem; }
+    .body { padding: 0 1.3rem 1.3rem; border-top: 1px solid var(--mw-line); }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: .92rem; }
+    th, td { text-align: left; padding: .55rem .4rem; border-bottom: 1px solid var(--mw-line); }
+    th { color: var(--mw-muted); font-weight: 600; font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; }
+    td.r, th.r { text-align: right; }
+    .pin { margin-top: 1rem; }
+    .pin pre { margin-top: .4rem; }
+    .empty { padding: 2rem; border: 1px dashed var(--mw-line); border-radius: 14px; color: var(--mw-muted); }
+  </style>
+
+  <main class="wrap page">
+    <h1>Downloads</h1>
+    <p class="lead">Machinewright is distributed as a macOS app, plus a Python package pinned by Git tag. Every release below links directly to its GitHub artifacts.</p>
+
+    {latest ? (
+      <div class="hero-card">
+        <div>
+          <h2>Machinewright {latest.version}</h2>
+          <div class="meta">Released {date(latest.published)} · macOS (Apple silicon){latest.dmg ? ` · ${humanSize(latest.dmg.size)}` : ''}</div>
+        </div>
+        <div style="display:flex;gap:.7rem;flex-wrap:wrap">
+          {latest.dmg && <a class="btn primary" href={latest.dmg.url}>Download .dmg</a>}
+          <a class="btn" href={latest.url}>Release notes</a>
+        </div>
+      </div>
+    ) : <div class="empty">No releases are published yet. Check the <a href={`${repoUrl}/releases`}>GitHub releases page</a>.</div>}
+
+    <div class="note">
+      <strong>First launch on macOS.</strong> Builds are currently ad-hoc signed and not notarized, so macOS may block the first launch. Drag the app to Applications, then Control-click it, choose <em>Open</em>, and confirm. If it still refuses, run <code>xattr -dr com.apple.quarantine /Applications/MachinewrightApp.app</code>.
+      Verify your download against the <code>.sha256</code> file with <code>shasum -a 256 -c</code>. See the <a href={`${base}docs/install/`}>install guide</a>.
+    </div>
+
+    <h2 class="sec">All versions</h2>
+    {releases.map((r, i) => (
+      <details class="rel" open={r === latest}>
+        <summary>
+          <span class="v">{r.version}</span>
+          {r === latest && <span class="tag">Latest</span>}
+          {r.prerelease && <span class="tag pre">Pre-release</span>}
+          <span class="d">{date(r.published)}</span>
+        </summary>
+        <div class="body">
+          {r.assets.length ? (
+            <table>
+              <thead><tr><th>File</th><th class="r">Size</th></tr></thead>
+              <tbody>
+                {r.assets.map((a) => <tr><td><a href={a.url}><code>{a.name}</code></a></td><td class="r">{humanSize(a.size)}</td></tr>)}
+              </tbody>
+            </table>
+          ) : <p class="meta">This release has no attached artifacts.</p>}
+          <div class="pin">
+            <span class="meta">Pin the Python package to this release in <code>pyproject.toml</code>:</span>
+            <pre class="code">machinewright @ git+https://github.com/ambientlabscomputing/machinewright.git@{r.tag}</pre>
+          </div>
+          <p class="meta"><a href={r.url}>Release notes on GitHub →</a></p>
+        </div>
+      </details>
+    ))}
+  </main>
+</Site>

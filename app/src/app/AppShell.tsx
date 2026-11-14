@@ -49,6 +49,7 @@ import { selectedPartIds, type AssemblyFormat } from "../export/exportModel";
 import { ExportDialog, type ExportTab } from "./ExportDialog";
 import { PrintTab } from "./PrintTab";
 import { BomTab } from "./BomTab";
+import { FileTabs } from "./FileTabs";
 import { EditorSurfaceView, type EditorSurfaceHandle } from "../editor/EditorHost";
 import { ViewportSurfaceView, type ViewportSurfaceHandle } from "../viewport/ViewportHost";
 import { InputsPanel, parseInputs, setInput, type InputValues } from "./InputsPanel";
@@ -415,6 +416,25 @@ export function AppShell({ view = "workspace", onViewChange }: AppShellProps = {
       if (sessionRef.current !== session) return;
       setDocuments(session.documentStore.listOpen());
       setActiveDocumentPath(path);
+    },
+    [session],
+  );
+
+  /** Close one tab; focus moves to its neighbour (or nothing when it was the last). */
+  const closeDocument = useCallback(
+    (path: string) => {
+      if (!session) return;
+      const open = session.documentStore.listOpen();
+      const index = open.findIndex((d) => d.path === path);
+      session.documentStore.close(path);
+      const remaining = session.documentStore.listOpen();
+      setDocuments(remaining);
+      setActiveDocumentPath((current) => {
+        if (current !== path) return current;
+        const next = remaining[Math.min(index, remaining.length - 1)];
+        return next ? next.path : null;
+      });
+      session.requestEvaluation();
     },
     [session],
   );
@@ -988,21 +1008,7 @@ export function AppShell({ view = "workspace", onViewChange }: AppShellProps = {
         <Resizable edge="right" size={editorWidth} onResize={setEditorWidth} minSize={280} maxSize={1400} collapsed={viewportMaximized}>
           <Stack flex={1}>
             {documents.length > 0 ? (
-              <Panel surface="panel" padding="sm">
-                <Stack direction="row" gap="sm" wrap>
-                  {documents.map((document) => (
-                    <Text
-                      key={document.path}
-                      variant="label"
-                      tone={document.path === activeDocumentPath ? "selection" : "primary"}
-                      onPress={() => setActiveDocumentPath(document.path)}
-                    >
-                      {document.path.split("/").pop()}
-                      {document.dirty ? " *" : ""}
-                    </Text>
-                  ))}
-                </Stack>
-              </Panel>
+              <FileTabs documents={documents} activePath={activeDocumentPath} onSelect={setActiveDocumentPath} onClose={closeDocument} />
             ) : null}
             {activeDocument ? (
               <EditorSurfaceView ref={editorRef} onSurfaceEvent={onEditorSurfaceEvent} />
@@ -1091,6 +1097,7 @@ export function AppShell({ view = "workspace", onViewChange }: AppShellProps = {
               onShowInViewport={showNodesInViewport}
               coordinator={session.exports}
               buildJobInput={session.buildExportInput}
+              fsChange={fsChange}
             />
           </Panel>
         </View>

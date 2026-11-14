@@ -1,0 +1,53 @@
+---
+import '../styles/theme.css';
+const { title, description = 'Graph-native hardware-as-code: design machines in Python, export CAD, BOMs and print plates.' } = Astro.props;
+const base = import.meta.env.BASE_URL;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="icon" type="image/svg+xml" href={`${base}favicon.svg`} />
+    <script is:inline>
+      try { const t = localStorage.getItem('starlight-theme'); if (t) document.documentElement.dataset.theme = t;
+        else document.documentElement.dataset.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; } catch {}
+    </script>
+  </head>
+  <body>
+    <header class="nav">
+      <a class="brand" href={base}><img src={`${base}favicon.svg`} alt="" width="26" height="26" /> Machinewright</a>
+      <nav>
+        <a href={`${base}docs/`}>Docs</a>
+        <a href={`${base}docs/reference/api/parts/`}>API</a>
+        <a href={`${base}downloads/`}>Downloads</a>
+        <a href="https://github.com/ambientlabscomputing/machinewright">GitHub</a>
+      </nav>
+    </header>
+    <slot />
+    <footer class="foot">
+      <span>© Ambient Labs</span>
+      <span><a href={`${base}docs/`}>Docs</a> · <a href={`${base}downloads/`}>Downloads</a> · <a href="https://github.com/ambientlabscomputing/machinewright">GitHub</a></span>
+    </footer>
+  </body>
+</html>
+<style is:global>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--mw-bg); color: var(--mw-ink); font-family: var(--sl-font); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  a { color: var(--sl-color-accent); }
+  .nav { position: sticky; top: 0; z-index: 10; display: flex; justify-content: space-between; align-items: center; padding: .8rem max(1rem, calc((100vw - 1120px)/2)); background: color-mix(in srgb, var(--mw-bg) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--mw-line); }
+  .brand { display: flex; align-items: center; gap: .6rem; font-weight: 700; text-decoration: none; color: var(--mw-ink); }
+  .brand img { border-radius: 6px; }
+  .nav nav { display: flex; gap: 1.4rem; }
+  .nav nav a { color: var(--mw-muted); text-decoration: none; font-size: .95rem; }
+  .nav nav a:hover { color: var(--mw-ink); }
+  .wrap { width: min(1120px, calc(100% - 2rem)); margin-inline: auto; }
+  .btn { display: inline-flex; align-items: center; gap: .5rem; padding: .7rem 1.2rem; border-radius: 10px; font-weight: 600; text-decoration: none; border: 1px solid var(--mw-line); color: var(--mw-ink); background: var(--mw-surface); }
+  .btn.primary { background: #1f7a4b; border-color: #1f7a4b; color: #fff; }
+  .btn.primary:hover { background: #196a40; }
+  .foot { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 1rem; padding: 2.5rem max(1rem, calc((100vw - 1120px)/2)); margin-top: 5rem; border-top: 1px solid var(--mw-line); color: var(--mw-muted); font-size: .9rem; }
+  pre.code { background: var(--mw-code-bg); color: #e6efe9; padding: 1.1rem 1.2rem; border-radius: 12px; overflow-x: auto; font: .88rem/1.6 var(--sl-font-mono); margin: 0; }
+  @media (max-width: 560px) { .nav nav { gap: .9rem; } .nav nav a:nth-child(2) { display: none; } }
+</style>

@@ -1,0 +1,131 @@
+---
+import { Image } from 'astro:assets';
+import Site from '../layouts/Site.astro';
+import workspace from '../assets/screens/workspace-assembled-full.jpg';
+import exploded from '../assets/screens/viewport-exploded.jpg';
+import assembled from '../assets/screens/viewport-assembled.jpg';
+import { getReleases } from '../lib/releases';
+
+const base = import.meta.env.BASE_URL;
+const { releases } = await getReleases();
+const latest = releases.find((r) => !r.prerelease);
+
+const features = [
+  ['Parts and assemblies as code', 'Subclass PartDefinition and AssemblyDefinition. Constructor arguments are the design parameters; CadQuery builds the leaf geometry.'],
+  ['One canonical graph', 'Typed ports, containment, transforms and connections resolve once into a ResolvedHardwareGraph. Every output is a projection of it.'],
+  ['Everything a build needs', 'STEP, STL, previews, structured BOMs, Graphviz graphs and provenance manifests from a single evaluate.'],
+  ['Native macOS editor', 'Edit Python with LSP completions and diagnostics beside a live 3D viewport. Tweak inputs and watch the model re-evaluate.'],
+  ['Purchased-parts BOM', 'Track supplier, SKU, cost, spares and order status per line, stored in a plain JSON file you can commit.'],
+  ['Print-ready plates', 'Orient, pack and export printed parts onto plates per material, ready for your slicer.'],
+];
+---
+<Site title="Machinewright — hardware as code">
+  <style>
+    .hero { padding: 5rem 0 2rem; text-align: center; }
+    .eyebrow { color: var(--sl-color-accent); font-weight: 650; font-size: .85rem; letter-spacing: .08em; text-transform: uppercase; }
+    h1 { font-size: clamp(2.3rem, 6vw, 4rem); line-height: 1.05; margin: .8rem auto 1.1rem; max-width: 16ch; letter-spacing: -.03em; }
+    .lede { max-width: 60ch; margin: 0 auto 2rem; color: var(--mw-muted); font-size: 1.15rem; }
+    .cta { display: flex; gap: .8rem; justify-content: center; flex-wrap: wrap; }
+    .shot { margin: 3.2rem auto 0; border-radius: 14px; overflow: hidden; border: 1px solid var(--mw-line); box-shadow: 0 30px 80px -30px rgba(10,40,25,.45); }
+    .shot img { display: block; width: 100%; height: auto; }
+    .cap { color: var(--mw-muted); font-size: .88rem; text-align: center; margin-top: .8rem; }
+    section.block { padding-top: 5.5rem; }
+    h2 { font-size: clamp(1.6rem, 3.4vw, 2.3rem); letter-spacing: -.02em; margin: 0 0 .6rem; }
+    .sub { color: var(--mw-muted); max-width: 62ch; margin: 0 0 2rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; }
+    .card { background: var(--mw-surface); border: 1px solid var(--mw-line); border-radius: 14px; padding: 1.3rem 1.4rem; }
+    .card h3 { margin: 0 0 .4rem; font-size: 1.05rem; }
+    .card p { margin: 0; color: var(--mw-muted); font-size: .95rem; }
+    .split { display: grid; grid-template-columns: 1.1fr 1fr; gap: 2rem; align-items: center; }
+    .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .pair figure { margin: 0; background: #0c1210; border: 1px solid var(--mw-line); border-radius: 14px; overflow: hidden; }
+    .pair img { width: 100%; height: 420px; object-fit: cover; object-position: center; display: block; }
+    .pair figcaption { padding: .7rem 1rem; color: #9fb0a6; font-size: .85rem; border-top: 1px solid #1c2a22; }
+    .stats { display: flex; gap: 2.2rem; flex-wrap: wrap; margin-top: 1.6rem; }
+    .stats b { display: block; font-size: 1.8rem; letter-spacing: -.02em; }
+    .stats span { color: var(--mw-muted); font-size: .85rem; }
+    .install { display: flex; flex-direction: column; gap: 1rem; }
+    @media (max-width: 860px) { .split, .pair { grid-template-columns: 1fr; } .hero { padding-top: 3rem; } .pair img { height: 340px; } }
+  </style>
+
+  <main class="wrap">
+    <section class="hero">
+      <div class="eyebrow">Hardware as code</div>
+      <h1>Design machines the way you write software.</h1>
+      <p class="lede">Machinewright is a graph-native framework for mechanical design in Python. Declare parts, ports and connections once, then project CAD, bills of materials and print plates from the same resolved graph.</p>
+      <div class="cta">
+        <a class="btn primary" href={`${base}downloads/`}>{latest ? `Download ${latest.version} for macOS` : 'Download'}</a>
+        <a class="btn" href={`${base}docs/install/`}>Install guide</a>
+        <a class="btn" href={`${base}docs/starter-project/`}>Create a project</a>
+      </div>
+      <div class="shot">
+        <Image src={workspace} alt="The Machinewright macOS app showing the ironless-actuator project: Python source, 3D viewport, inputs and diagnostics." widths={[800, 1200, 1419]} sizes="(max-width: 1120px) 100vw, 1120px" loading="eager" />
+      </div>
+      <p class="cap">The Machinewright app with the <em>ironless-actuator</em> sample project: a 154-part planetary-geared actuator.</p>
+    </section>
+
+    <section class="block" id="features">
+      <h2>Everything from one source of truth</h2>
+      <p class="sub">Stop keeping CAD, BOM spreadsheets and assembly notes in sync by hand. They all derive from the same code.</p>
+      <div class="grid">
+        {features.map(([t, d]) => <div class="card"><h3>{t}</h3><p>{d}</p></div>)}
+      </div>
+    </section>
+
+    <section class="block">
+      <div class="split">
+        <div>
+          <h2>Parametric by construction</h2>
+          <p class="sub">Parts take typed parameters. Assemblies place them and declare how they connect. Change a number, re-evaluate, and everything downstream follows.</p>
+          <div class="stats">
+            <div><b>154</b><span>parts in the sample actuator</span></div>
+            <div><b>8</b><span>artifact formats per evaluate</span></div>
+            <div><b>1</b><span>canonical graph</span></div>
+          </div>
+        </div>
+<pre class="code">class Plate(PartDefinition):
+    material = MATERIALS["PLA"]
+
+    def __init__(self, width_mm: float):
+        self.width_mm = width_mm
+
+    def geometry(self):
+        return cadquery.Workplane("XY").box(
+            self.width_mm, 20, 4)
+
+class Machine(AssemblyDefinition):
+    def define(self, builder):
+        builder.part("base", Plate(40))
+        builder.part(
+            "cover", Plate(40),
+            transform=Transform.translated(z=12))</pre>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2>Inspect it from every angle</h2>
+      <p class="sub">The viewport switches between the assembled machine and an exploded view so you can check fit, order of assembly and hardware at a glance.</p>
+      <div class="pair">
+        <figure><Image src={assembled} alt="Assembled view of the ironless actuator in the Machinewright viewport" widths={[400, 810]} sizes="(max-width: 860px) 100vw, 540px" /><figcaption>Assembled view</figcaption></figure>
+        <figure><Image src={exploded} alt="Exploded view of the ironless actuator showing gears, bearings and fasteners" widths={[400, 810]} sizes="(max-width: 860px) 100vw, 540px" /><figcaption>Exploded view: gears, bearings and fasteners</figcaption></figure>
+      </div>
+    </section>
+
+    <section class="block">
+      <div class="split">
+        <div class="install">
+          <div>
+            <h2>Start in a minute</h2>
+            <p class="sub">With <a href="https://docs.astral.sh/uv/">uv</a> installed, scaffold a design and evaluate it from the command line, then open the folder in the macOS app.</p>
+          </div>
+          <div class="cta" style="justify-content:flex-start"><a class="btn primary" href={`${base}docs/starter-project/`}>Starter project guide</a><a class="btn" href={`${base}docs/`}>Read the docs</a></div>
+        </div>
+<pre class="code">machinewright project init indexing-table --starter basic
+cd indexing-table
+uv sync
+uv run machinewright project evaluate \
+  indexing-table.main 0.1.0 inputs.json artifacts/</pre>
+      </div>
+    </section>
+  </main>
+</Site>

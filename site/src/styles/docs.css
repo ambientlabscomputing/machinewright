@@ -1,0 +1,4 @@
+.sl-markdown-content h3 code { font-size: inherit; }
+.sl-markdown-content h5 { font-size: var(--sl-text-base); margin-top: 1.4rem; }
+.sl-markdown-content h3 + p em { color: var(--sl-color-gray-3); font-size: var(--sl-text-sm); }
+.site-title img { border-radius: 6px; }
