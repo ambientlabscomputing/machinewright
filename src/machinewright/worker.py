@@ -23,6 +23,12 @@ from machinewright.evaluation import (
     evaluate_project,
     evaluate_sweep_point,
 )
+from machinewright.export_jobs import (
+    ExportCancelledError,
+    ExportJobKind,
+    evaluate_design,
+    run_export_job,
+)
 from machinewright.export_service import CancellationToken, ExportProgress
 from machinewright.project import load_project
 from machinewright.protocol import machinewright_worker_pb2 as protocol
@@ -38,6 +44,7 @@ CAPABILITIES = (
     "cancellation.v1",
     "content_addressed_meshes.v1",
     "sweep_evaluation.v1",
+    "export_jobs.v1",
 )
 
 
@@ -48,7 +55,9 @@ def _package_version(name: str) -> str:
         return "unknown"
 
 
-_MaterializableRequest = protocol.EvaluateProject | protocol.EvaluateSweepPoint
+_MaterializableRequest = (
+    protocol.EvaluateProject | protocol.EvaluateSweepPoint | protocol.RunExportJob
+)
 
 
 def _verify_environment(request: _MaterializableRequest) -> None:
@@ -184,6 +193,10 @@ class Worker:
         # cancelled immediately too, mirroring `cancelled_before_start` above.
         self.sweep_cancellations: dict[tuple[str, int, int], CancellationToken] = {}
         self.cancelled_sweeps: set[tuple[str, int]] = set()
+        # Export jobs are keyed by (session_id, job_id); cancellation is
+        # advisory and checked between files/plates inside the job.
+        self.export_cancellations: dict[tuple[str, int], CancellationToken] = {}
+        self.cancelled_exports: set[tuple[str, int]] = set()
         self.lock = threading.Lock()
         # The project root actually materialized (and imported from) by the
         # previous evaluation, so the next call can evict its modules/sys.path
@@ -269,7 +282,9 @@ class Worker:
                 self.writer.write(
                     protocol.WorkerEvent(
                         sweep_point_cancelled=protocol.SweepPointCancelled(
-                            session_id=session_id, sweep_id=sweep_id, point_index=point_index
+                            session_id=session_id,
+                            sweep_id=sweep_id,
+                            point_index=point_index,
                         )
                     )
                 )
@@ -291,7 +306,9 @@ class Worker:
             if token.cancelled:
                 event.sweep_point_cancelled.CopyFrom(
                     protocol.SweepPointCancelled(
-                        session_id=session_id, sweep_id=sweep_id, point_index=point_index
+                        session_id=session_id,
+                        sweep_id=sweep_id,
+                        point_index=point_index,
                     )
                 )
             else:
@@ -414,11 +431,119 @@ class Worker:
             if temporary is not None:
                 shutil.rmtree(temporary, ignore_errors=True)
 
+    def run_export(self, request: protocol.RunExportJob) -> None:
+        key = (request.session_id, request.job_id)
+        token = CancellationToken()
+        with self.lock:
+            self.export_cancellations[key] = token
+            if key in self.cancelled_exports:
+                token.cancel()
+                self.cancelled_exports.discard(key)
+        # Same constraint as `evaluate()`: CAD work stays on the main thread.
+        self._run_export(request, token)
+
+    def cancel_export(self, request: protocol.CancelExportJob) -> None:
+        key = (request.session_id, request.job_id)
+        with self.lock:
+            token = self.export_cancellations.get(key)
+            if token is None:
+                self.cancelled_exports.add(key)
+            else:
+                token.cancel()
+
+    def _run_export(
+        self, request: protocol.RunExportJob, token: CancellationToken
+    ) -> None:
+        temporary: Path | None = None
+        project_root: Path | None = None
+        key = (request.session_id, request.job_id)
+
+        def progress(stage: str, completed: int, total: int, message: str) -> None:
+            self.writer.write(
+                protocol.WorkerEvent(
+                    export_progress=protocol.ExportJobProgress(
+                        session_id=request.session_id,
+                        job_id=request.job_id,
+                        stage=stage,
+                        completed=completed,
+                        total=max(total, 1),
+                        message=message,
+                    )
+                )
+            )
+
+        try:
+            _verify_environment(request)
+            if self._last_project_root is not None:
+                _clear_modules(self._last_project_root)
+            project_root, temporary = _materialize_overlay(request)
+            design = evaluate_design(
+                project_root,
+                request.template_id,
+                request.template_version,
+                json.loads(request.inputs_json),
+            )
+            if token.cancelled:
+                raise ExportCancelledError
+            destination = (
+                Path(request.output_directory) if request.output_directory else None
+            )
+            result = run_export_job(
+                design,
+                ExportJobKind(request.kind),
+                destination,
+                request.options_json,
+                basename=request.basename or "assembly",
+                progress=progress,
+                cancellation=token,
+            )
+            self.writer.write(
+                protocol.WorkerEvent(
+                    export_completed=protocol.ExportJobCompleted(
+                        session_id=request.session_id,
+                        job_id=request.job_id,
+                        output_directory=request.output_directory,
+                        # Plain JSON, not canonical_json: that encodes floats as
+                        # strings for content-addressing, which we don't need here.
+                        result_json=json.dumps(result).encode(),
+                    )
+                )
+            )
+        except ExportCancelledError:
+            self.writer.write(
+                protocol.WorkerEvent(
+                    export_cancelled=protocol.ExportJobCancelled(
+                        session_id=request.session_id, job_id=request.job_id
+                    )
+                )
+            )
+        except Exception as error:
+            self.writer.write(
+                protocol.WorkerEvent(
+                    export_failed=protocol.ExportJobFailed(
+                        session_id=request.session_id,
+                        job_id=request.job_id,
+                        code="export.failed",
+                        message=str(error),
+                        traceback=traceback.format_exc(),
+                    )
+                )
+            )
+        finally:
+            with self.lock:
+                self.export_cancellations.pop(key, None)
+            if project_root is not None:
+                self._last_project_root = project_root
+            if temporary is not None:
+                shutil.rmtree(temporary, ignore_errors=True)
+
     def shutdown(self) -> None:
         with self.lock:
             for token in self.cancellations.values():
                 token.cancel()
             for token in self.sweep_cancellations.values():
+                token.cancel()
+            for token in self.export_cancellations.values():
                 token.cancel()
 
 
@@ -445,6 +570,10 @@ def main() -> None:  # noqa: C901 - protocol dispatch loop
                 commands.put(("evaluate_sweep_point", request.evaluate_sweep_point))
             elif kind == "cancel_sweep":
                 worker.cancel_sweep(request.cancel_sweep)
+            elif kind == "run_export_job":
+                commands.put(("run_export_job", request.run_export_job))
+            elif kind == "cancel_export_job":
+                worker.cancel_export(request.cancel_export_job)
             elif kind == "shutdown":
                 commands.put(("shutdown", None))
                 return
@@ -496,6 +625,10 @@ def main() -> None:  # noqa: C901 - protocol dispatch loop
                     evaluate_sweep_point_request, protocol.EvaluateSweepPoint
                 )
                 worker.evaluate_sweep_point(evaluate_sweep_point_request)
+            elif kind == "run_export_job":
+                export_request = value
+                assert isinstance(export_request, protocol.RunExportJob)
+                worker.run_export(export_request)
             elif kind == "shutdown":
                 break
     finally:

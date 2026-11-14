@@ -37,7 +37,10 @@ def test_direct_evaluation_is_portable_and_maps_source(tmp_path: Path):
         request=REQUEST,
     )
     assert first.snapshot.graph_digest == second.snapshot.graph_digest
-    assert first.snapshot.artifact_manifest_digest == second.snapshot.artifact_manifest_digest
+    assert (
+        first.snapshot.artifact_manifest_digest
+        == second.snapshot.artifact_manifest_digest
+    )
     assert first.snapshot.source_mappings
     assert first.snapshot.dependencies[0].conservative
     assert {mesh.graph_node_id for mesh in first.snapshot.meshes} == set(
@@ -88,7 +91,9 @@ def test_viewport_mesh_bounds_reflect_each_nodes_world_transform(tmp_path: Path)
         assert mesh_z_min <= world_z <= mesh_z_max, (
             f"{node_id} mesh bounds {bounds} do not contain its world z={world_z}"
         )
-    bounds_by_node = {node_id: meshes_by_node[node_id].bounds for node_id in world_z_by_node}
+    bounds_by_node = {
+        node_id: meshes_by_node[node_id].bounds for node_id in world_z_by_node
+    }
     assert len({bounds for bounds in bounds_by_node.values()}) == len(bounds_by_node), (
         "distinct world transforms must not collapse onto identical mesh bounds"
     )
@@ -135,7 +140,10 @@ def test_full_artifact_bundle_is_deterministic(tmp_path: Path):
         INPUTS,
         tmp_path / "second",
     )
-    assert first.snapshot.artifact_manifest_digest == second.snapshot.artifact_manifest_digest
+    assert (
+        first.snapshot.artifact_manifest_digest
+        == second.snapshot.artifact_manifest_digest
+    )
     assert {item.kind: item.digest for item in first.artifacts} == {
         item.kind: item.digest for item in second.artifacts
     }
@@ -216,23 +224,33 @@ def test_worker_evaluates_project_and_returns_immutable_snapshot(tmp_path: Path)
     )
     events = _parse_worker_events(process.stdout)
     completed = next(event.completed for event in events if event.HasField("completed"))
-    schema_event = next(event.input_schema for event in events if event.HasField("input_schema"))
+    schema_event = next(
+        event.input_schema for event in events if event.HasField("input_schema")
+    )
     assert schema_event.session_id == "test-session"
     assert schema_event.generation == 7
     schema = json.loads(schema_event.schema_json)
-    assert schema["properties"]["requirements"]["properties"]["payload_kg"]["type"] == "number"
-    assert next(i for i, event in enumerate(events) if event.HasField("input_schema")) < next(
-        i for i, event in enumerate(events) if event.HasField("completed")
+    assert (
+        schema["properties"]["requirements"]["properties"]["payload_kg"]["type"]
+        == "number"
     )
+    assert next(
+        i for i, event in enumerate(events) if event.HasField("input_schema")
+    ) < next(i for i, event in enumerate(events) if event.HasField("completed"))
     assert completed.generation == 7
     assert Path(completed.snapshot_path).is_file()
     # R11b: the worker reports digests of what it actually read so a caller
     # that independently reads the project tree can detect a divergence.
-    evaluated = {item.relative_path: item.digest for item in completed.evaluated_sources}
+    evaluated = {
+        item.relative_path: item.digest for item in completed.evaluated_sources
+    }
     assert "examples/reference_project.py" in evaluated
-    expected_digest = "sha256:" + hashlib.sha256(
-        (ROOT / "examples/reference_project.py").read_bytes()
-    ).hexdigest()
+    expected_digest = (
+        "sha256:"
+        + hashlib.sha256(
+            (ROOT / "examples/reference_project.py").read_bytes()
+        ).hexdigest()
+    )
     assert evaluated["examples/reference_project.py"] == expected_digest
 
 
@@ -282,7 +300,9 @@ def test_worker_processes_two_sequential_evaluations_in_one_process(tmp_path: Pa
         framed(evaluate_request(1, valid_source))
         + framed(evaluate_request(2, broken_source))
         + framed(evaluate_request(3, valid_source))
-        + framed(protocol.WorkerRequest(shutdown=protocol.Shutdown()).SerializeToString())
+        + framed(
+            protocol.WorkerRequest(shutdown=protocol.Shutdown()).SerializeToString()
+        )
     )
     process = subprocess.run(
         ["uv", "run", "machinewright-worker"],
@@ -297,7 +317,9 @@ def test_worker_processes_two_sequential_evaluations_in_one_process(tmp_path: Pa
         if event.HasField("completed")
     }
     failed = {
-        event.failed.generation: event.failed for event in events if event.HasField("failed")
+        event.failed.generation: event.failed
+        for event in events
+        if event.HasField("failed")
     }
     assert set(completed) == {1, 3}, (process.stderr.decode(errors="replace"), failed)
     assert set(failed) == {2}
@@ -352,7 +374,11 @@ def test_project_sweep_cli_produces_one_feasibility_flip_and_loadable_per_point_
     # (feasible through payload_kg=48, infeasible from payload_kg=51). The
     # range starts above 0, not at it, since ReferenceInputs.payload_kg is
     # constrained to `gt=0`.
-    flips = sum(1 for before, after in zip(feasibility, feasibility[1:], strict=False) if before != after)
+    flips = sum(
+        1
+        for before, after in zip(feasibility, feasibility[1:], strict=False)
+        if before != after
+    )
     assert flips == 1, feasibility
 
     for point in points:

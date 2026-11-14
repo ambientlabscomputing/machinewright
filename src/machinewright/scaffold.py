@@ -25,7 +25,9 @@ def create_project(name: str, output_dir: Path, starter: str) -> Path:
     if name == "machinewright":
         raise ValueError("choose a project name other than machinewright")
     if starter not in STARTERS:
-        raise ValueError(f"unknown starter {starter!r}; available: {', '.join(STARTERS)}")
+        raise ValueError(
+            f"unknown starter {starter!r}; available: {', '.join(STARTERS)}"
+        )
 
     output_dir = output_dir.resolve()
     target = output_dir / name
@@ -43,7 +45,9 @@ def create_project(name: str, output_dir: Path, starter: str) -> Path:
         try:
             target.mkdir(parents=True)
         except FileExistsError as error:
-            raise FileExistsError(f"project destination already exists: {target}") from error
+            raise FileExistsError(
+                f"project destination already exists: {target}"
+            ) from error
 
         try:
             cookiecutter(

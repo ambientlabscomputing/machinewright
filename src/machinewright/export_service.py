@@ -230,7 +230,9 @@ def export_artifacts(  # noqa: C901 - one transactional artifact pipeline
         material is not None and material.process == Process.PRINTED
         for material in design.materials.values()
     ):
-        formats = tuple(kind for kind in formats if kind != ExportFormat.PRINT_LAYOUT_STL)
+        formats = tuple(
+            kind for kind in formats if kind != ExportFormat.PRINT_LAYOUT_STL
+        )
     if ExportFormat.MANIFEST_JSON in formats:
         formats = tuple(
             item for item in formats if item != ExportFormat.MANIFEST_JSON

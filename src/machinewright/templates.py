@@ -97,7 +97,9 @@ class MachineTemplate:
         for name, parameter in self.signature.parameters.items():
             annotation = hints.get(name, parameter.annotation)
             if annotation is inspect.Parameter.empty:
-                raise TypeError(f"template parameter {name!r} requires a type annotation")
+                raise TypeError(
+                    f"template parameter {name!r} requires a type annotation"
+                )
             properties[name] = TypeAdapter(annotation).json_schema()
             if parameter.default is inspect.Parameter.empty:
                 required.append(name)
@@ -118,9 +120,9 @@ class MachineTemplate:
         arguments: dict[str, Any] = {}
         for name, parameter in self.signature.parameters.items():
             if name in inputs:
-                arguments[name] = TypeAdapter(hints.get(name, parameter.annotation)).validate_python(
-                    inputs[name], strict=False
-                )
+                arguments[name] = TypeAdapter(
+                    hints.get(name, parameter.annotation)
+                ).validate_python(inputs[name], strict=False)
             elif parameter.default is not inspect.Parameter.empty:
                 arguments[name] = parameter.default
             else:
@@ -132,7 +134,9 @@ class MachineTemplate:
             return HardwareResult(design=value)
         if isinstance(value, AssemblyDefinition):
             return HardwareResult(design=value.resolve(root_id=self.template_id))
-        raise TypeError("machine template must return HardwareResult, ResolvedDesign, or AssemblyDefinition")
+        raise TypeError(
+            "machine template must return HardwareResult, ResolvedDesign, or AssemblyDefinition"
+        )
 
 
 _T = TypeVar("_T", bound=TemplateCallable)

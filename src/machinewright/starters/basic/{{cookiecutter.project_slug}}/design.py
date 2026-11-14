@@ -37,7 +37,9 @@ class Machine(AssemblyDefinition):
 
     def define(self, builder: AssemblyBuilder) -> None:
         builder.part("base", Plate(self.width_mm))
-        builder.part("cover", Plate(self.width_mm), transform=Transform.translated(z=12))
+        builder.part(
+            "cover", Plate(self.width_mm), transform=Transform.translated(z=12)
+        )
 
 
 @machine_template(id=TEMPLATE_ID, version="0.1.0")

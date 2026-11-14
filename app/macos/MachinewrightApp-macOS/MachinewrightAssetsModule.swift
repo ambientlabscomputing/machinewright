@@ -138,6 +138,40 @@ class MachinewrightAssetsModule: NSObject {
     }
   }
 
+  /// Copies `source` to `destination`, replacing any existing file (callers
+  /// obtain `destination` from a save panel, which has already confirmed the
+  /// replacement). Goes through a temp file so a failed copy never leaves a
+  /// truncated export behind.
+  @objc(copyFile:destination:resolver:rejecter:)
+  func copyFile(
+    _ source: String,
+    destination: String,
+    resolver resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    let sourceURL = URL(fileURLWithPath: source)
+    let targetURL = URL(fileURLWithPath: destination)
+    let directory = targetURL.deletingLastPathComponent()
+    do {
+      guard FileManager.default.fileExists(atPath: sourceURL.path) else {
+        reject("copy_failed", "Source file does not exist: \(source)", nil)
+        return
+      }
+      try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+      let tempURL = directory.appendingPathComponent(".\(targetURL.lastPathComponent).tmp-\(UUID().uuidString)")
+      defer { try? FileManager.default.removeItem(at: tempURL) }
+      try FileManager.default.copyItem(at: sourceURL, to: tempURL)
+      if FileManager.default.fileExists(atPath: targetURL.path) {
+        _ = try FileManager.default.replaceItemAt(targetURL, withItemAt: tempURL)
+      } else {
+        try FileManager.default.moveItem(at: tempURL, to: targetURL)
+      }
+      resolve(nil)
+    } catch {
+      reject("copy_failed", "Failed to copy \(source) to \(destination): \(error.localizedDescription)", error)
+    }
+  }
+
   /// A single-level directory listing — the primitive `app/FileExplorer.tsx`
   /// (M2 workspace shell) needs for a VS Code-style lazily-expanding file
   /// tree. Deliberately non-recursive: the caller lists a directory only

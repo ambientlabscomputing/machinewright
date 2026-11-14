@@ -47,13 +47,17 @@ def find_project_root(start: Path | None = None) -> Path:
     for candidate in (current, *current.parents):
         if (candidate / "machinewright.toml").is_file():
             return candidate
-    raise FileNotFoundError("no machinewright.toml found in this directory or its parents")
+    raise FileNotFoundError(
+        "no machinewright.toml found in this directory or its parents"
+    )
 
 
 def load_project(root: Path | None = None) -> tuple[Path, ProjectConfig]:
     project_root = find_project_root(root)
     config = ProjectConfig.model_validate(
-        tomllib.loads((project_root / "machinewright.toml").read_text(encoding="utf-8")),
+        tomllib.loads(
+            (project_root / "machinewright.toml").read_text(encoding="utf-8")
+        ),
         strict=False,
     )
     validate_project_paths(project_root, config)
@@ -70,4 +74,6 @@ def validate_project_paths(root: Path, config: ProjectConfig) -> None:
             raise FileNotFoundError(f"declared project path does not exist: {value}")
     for golden in config.golden_evaluations:
         if not (root / golden.inputs).is_file():
-            raise FileNotFoundError(f"golden input file does not exist: {golden.inputs}")
+            raise FileNotFoundError(
+                f"golden input file does not exist: {golden.inputs}"
+            )

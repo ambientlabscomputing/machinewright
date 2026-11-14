@@ -114,6 +114,83 @@ machinewright export bom "assemblies.your_package.assemblies.Product" --location
 machinewright export bundle "assemblies.your_package.assemblies.Product" --location artifacts/
 ```
 
+### Exporting from the app
+
+The macOS app has an **Export** button (also `Cmd+Shift+E` and the command
+palette) with two tabs, and a separate **3D Print** app tab:
+
+- **Assembly** — whole-design STEP or STL. Every evaluation already writes both
+  files, so this is a save-as copy of exactly what the viewport shows.
+- **Parts** — per-part (or one combined) STL/STEP for all parts, printed parts
+  only, or the current selection (selecting an assembly in the graph covers all
+  parts beneath it). Parts can keep their assembly position or be exported at
+  their own origin.
+- **3D Print** (its own app-level tab, next to the workspace) — a full-window 3D
+  view of your printer's bed with floating tool boxes: printer settings and
+  **Generate Plates** on the left, the plate list on the right. A progress bar
+  follows orienting, packing, and writing, and each plate appears in the view the
+  moment its STL is written. **Export STLs…** copies the set to a folder you
+  choose, for a real slicer. Machinewright does not slice or generate G-code.
+
+### Purchased-parts BOM
+
+The **BOM** app tab shows the design's purchased parts (material process
+`PURCHASED`). The lines are Machinewright's own BOM — the `bom.json` every
+evaluation writes (`lib/bom.py`) — so grouping, quantities and manufacturer
+identity are exactly what `machinewright export bom` produces; the tab adds no
+second BOM logic. For each line you can
+record supplier, SKU, product link, unit cost, spares, order status (to order /
+ordered / received / on hand), and notes; the tab totals units to buy and cost
+and exports a CSV. **Show in Viewport** selects a line's instances in the 3D view.
+
+Procurement data is saved in `bom-procurement.json` in the project root (schema:
+`schemas/ProcurementFile-1.0.schema.json`), so it can be committed with the design.
+It is keyed by the BOM line's `line_id` (a digest of part definition, revision, and
+parameters), so it survives unrelated edits; entries for parts that leave the
+design are kept in case they return. The **Export CSV** button runs the same code as
+the CLI below, in the worker.
+
+The file and the merge with the BOM live in `lib/procurement.py`, shared by the app,
+the CLI, and agents. For scripting and sourcing work:
+
+```bash
+machinewright bom list --unsourced --json     # purchased lines still missing a supplier or price
+machinewright bom set 4702b31a22e0 --supplier McMaster --sku 91290A115 \
+    --unit-cost 0.12 --spares 2 --status ordered
+machinewright bom export parts.csv            # BOM + sourcing as CSV
+```
+
+Commands read the newest `.machinewright/output/assembly-*.bom.json` (or `--bom`),
+accept a unique prefix of a line id, and write the procurement file atomically. The
+app reads the file when the BOM tab opens, so reopen the tab after editing it
+externally.
+
+Print planning rules:
+
+- Only parts whose material process is `PRINTED` are planned.
+- Plates never mix materials (different filaments cannot share a run), so a
+  design using two nylons produces separate plates for each.
+- Each part is laid on its least-overhanging axis-aligned face (overhang means
+  surfaces steeper than 45 degrees, including curved ones). Taller orientations
+  pay a penalty, so a marginal overhang saving never produces a very tall print.
+  Choose **As designed** to keep authored orientations.
+- Parts are shelf-packed with the configured spacing and bed margin, rotating
+  90 degrees about Z when that helps, and spill onto extra plates when a bed
+  fills. Parts too tall or too large for the printer are listed as skipped, never
+  silently dropped.
+- Output is `<name>-plate-NN-<material>.stl` per plate plus `<name>-plan.json`
+  (positions, orientations, skipped parts). Coordinates put the bed's front-left
+  corner (or its center, if configured) at the origin.
+
+Printer and export settings are saved per project in
+`.machinewright/export-settings.json`; generated plates live in
+`.machinewright/print/` until you export them. The same jobs run in the worker through
+the `RunExportJob` protocol message, so they never interrupt live evaluation.
+
+The planner does not generate supports. Parts with unavoidable overhangs (for
+example a closed cup with features facing both ways) still need supports enabled
+in your slicer.
+
 ## Portable machine templates
 
 Projects that expose typed hardware functions add a `machinewright.toml` beside

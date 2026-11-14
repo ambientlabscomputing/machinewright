@@ -40,3 +40,28 @@ def test_normal_and_exploded_cad_are_graph_projections():
     exploded = assembly.cad(exploded=True, spacing=50, nested=True).val()
     assert normal.Volume() == pytest.approx(exploded.Volume())
     assert exploded.BoundingBox().zlen > normal.BoundingBox().zlen
+
+
+def test_bom_lines_carry_the_material_process() -> None:
+    import cadquery
+
+    from machinewright import (
+        MATERIALS,
+        AssemblyBuilder,
+        AssemblyDefinition,
+        PartDefinition,
+    )
+    from machinewright.lib.bom import generate_structured_bom
+
+    class Bolt(PartDefinition):
+        material = MATERIALS["OFF_THE_SHELF"]
+
+        def geometry(self) -> cadquery.Workplane:
+            return cadquery.Workplane("XY").box(3, 3, 10)
+
+    class Assembly(AssemblyDefinition):
+        def define(self, builder: AssemblyBuilder) -> None:
+            builder.part("bolt", Bolt())
+
+    bom = generate_structured_bom(Assembly().resolve(root_id="t").graph)
+    assert [line.material_process for line in bom.lines] == ["PURCHASED"]

@@ -247,7 +247,9 @@ def _mesh_bounds(
     )
 
 
-def _write_meshes(design: ResolvedDesign, destination: Path) -> tuple[MeshReference, ...]:
+def _write_meshes(
+    design: ResolvedDesign, destination: Path
+) -> tuple[MeshReference, ...]:
     mesh_dir = destination / "meshes"
     mesh_dir.mkdir(parents=True, exist_ok=True)
     references: list[MeshReference] = []
@@ -263,7 +265,9 @@ def _write_meshes(design: ResolvedDesign, destination: Path) -> tuple[MeshRefere
     }
     for node_id, shape in sorted(design.geometries.items()):
         transform = transforms.get(node_id)
-        located_shape = shape.located(transform.location()) if transform is not None else shape
+        located_shape = (
+            shape.located(transform.location()) if transform is not None else shape
+        )
         vertices, triangles = located_shape.tessellate(0.1, 0.1)
         positions = [
             (float(vertex.x), float(vertex.y), float(vertex.z)) for vertex in vertices

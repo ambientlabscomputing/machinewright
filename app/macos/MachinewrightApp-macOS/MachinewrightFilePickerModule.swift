@@ -67,4 +67,71 @@ class MachinewrightFilePickerModule: NSObject {
       }
     }
   }
+
+  /// Folder chooser for exports: unlike `pickProjectDirectory` it can create a
+  /// new folder and is labelled for the export being made.
+  @objc(pickDirectory:message:startDirectory:resolver:rejecter:)
+  func pickDirectory(
+    _ prompt: String,
+    message: String,
+    startDirectory: String,
+    resolver resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    DispatchQueue.main.async {
+      let panel = NSOpenPanel()
+      panel.canChooseDirectories = true
+      panel.canChooseFiles = false
+      panel.canCreateDirectories = true
+      panel.allowsMultipleSelection = false
+      panel.prompt = prompt
+      panel.message = message
+      if !startDirectory.isEmpty {
+        panel.directoryURL = URL(fileURLWithPath: startDirectory)
+      }
+      if panel.runModal() == .OK, let url = panel.url {
+        resolve(url.path)
+      } else {
+        resolve(NSNull())
+      }
+    }
+  }
+
+  /// Save panel for a single exported file. The panel itself asks before
+  /// replacing an existing file, so callers may overwrite what it returns.
+  @objc(pickSaveFile:startDirectory:resolver:rejecter:)
+  func pickSaveFile(
+    _ suggestedName: String,
+    startDirectory: String,
+    resolver resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    DispatchQueue.main.async {
+      let panel = NSSavePanel()
+      panel.canCreateDirectories = true
+      panel.nameFieldStringValue = suggestedName
+      panel.prompt = "Export"
+      if !startDirectory.isEmpty {
+        panel.directoryURL = URL(fileURLWithPath: startDirectory)
+      }
+      if panel.runModal() == .OK, let url = panel.url {
+        resolve(url.path)
+      } else {
+        resolve(NSNull())
+      }
+    }
+  }
+
+  /// Selects `path` in a Finder window.
+  @objc(revealInFinder:resolver:rejecter:)
+  func revealInFinder(
+    _ path: String,
+    resolver resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    DispatchQueue.main.async {
+      NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+      resolve(nil)
+    }
+  }
 }

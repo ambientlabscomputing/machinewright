@@ -15,6 +15,7 @@ from machinewright.evaluation import EvaluationSnapshot
 from machinewright.export_service import ExportRequest, ExportResult
 from machinewright.hardware_graph import ResolvedHardwareGraph
 from machinewright.lib.bom import BOM
+from machinewright.lib.procurement import ProcurementFile
 from machinewright.project import ProjectConfig
 from machinewright.templates import EvidenceRequirement, Observable
 
@@ -27,6 +28,7 @@ MODELS = (
     DutyCycleRating,
     ResolvedHardwareGraph,
     BOM,
+    ProcurementFile,
     ExportRequest,
     ExportResult,
     EvaluationSnapshot,

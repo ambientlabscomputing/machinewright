@@ -61,6 +61,30 @@ message CancelSweep {
   uint64 sweep_id = 2;
 }
 
+// Export jobs: on-demand exports into a user-chosen folder, addressed by
+// (session_id, job_id) rather than an evaluation generation so they never
+// interfere with the live-preview evaluation stream. `kind` is "parts" or
+// "print_plan"; `options_json` is that kind's options document.
+message RunExportJob {
+  string session_id = 1;
+  uint64 job_id = 2;
+  string project_root = 3;
+  string template_id = 4;
+  string template_version = 5;
+  bytes inputs_json = 6;
+  repeated SourceOverlay overlays = 7;
+  string environment_digest = 8;
+  string kind = 9;
+  string output_directory = 10;
+  bytes options_json = 11;
+  string basename = 12;
+}
+
+message CancelExportJob {
+  string session_id = 1;
+  uint64 job_id = 2;
+}
+
 message WorkerRequest {
   oneof request {
     Hello hello = 1;
@@ -69,6 +93,8 @@ message WorkerRequest {
     Shutdown shutdown = 4;
     EvaluateSweepPoint evaluate_sweep_point = 5;
     CancelSweep cancel_sweep = 6;
+    RunExportJob run_export_job = 7;
+    CancelExportJob cancel_export_job = 8;
   }
 }
 
@@ -160,6 +186,35 @@ message EvaluationInputSchema {
   bytes schema_json = 3;
 }
 
+message ExportJobProgress {
+  string session_id = 1;
+  uint64 job_id = 2;
+  string stage = 3;
+  uint32 completed = 4;
+  uint32 total = 5;
+  string message = 6;
+}
+
+message ExportJobCompleted {
+  string session_id = 1;
+  uint64 job_id = 2;
+  string output_directory = 3;
+  bytes result_json = 4;
+}
+
+message ExportJobFailed {
+  string session_id = 1;
+  uint64 job_id = 2;
+  string code = 3;
+  string message = 4;
+  string traceback = 5;
+}
+
+message ExportJobCancelled {
+  string session_id = 1;
+  uint64 job_id = 2;
+}
+
 message WorkerEvent {
   oneof event {
     CapabilityReport capabilities = 1;
@@ -172,5 +227,9 @@ message WorkerEvent {
     SweepPointFailed sweep_point_failed = 8;
     SweepPointCancelled sweep_point_cancelled = 9;
     EvaluationInputSchema input_schema = 10;
+    ExportJobProgress export_progress = 11;
+    ExportJobCompleted export_completed = 12;
+    ExportJobFailed export_failed = 13;
+    ExportJobCancelled export_cancelled = 14;
   }
 }

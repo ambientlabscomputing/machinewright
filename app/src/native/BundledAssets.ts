@@ -18,6 +18,7 @@ interface MachinewrightAssetsNativeModule {
   meshFileURL(path: string, expectedDigest: string): Promise<string>;
   digestFile(path: string): Promise<string>;
   writeTextFileAtomically(path: string, contents: string): Promise<void>;
+  copyFile(source: string, destination: string): Promise<void>;
   listDirectory(path: string): Promise<DirectoryEntry[]>;
   listFilesRecursive(root: string, ignoredNames: readonly string[], limit: number): Promise<string[]>;
   searchInFiles(
@@ -88,6 +89,11 @@ export function digestFile(path: string): Promise<string> {
  */
 export function writeTextFileAtomically(path: string, contents: string): Promise<void> {
   return nativeModule().writeTextFileAtomically(path, contents);
+}
+
+/** Copies a file, replacing any existing destination (via a temp file, so a failure never leaves a truncated copy). */
+export function copyFile(source: string, destination: string): Promise<void> {
+  return nativeModule().copyFile(source, destination);
 }
 
 /**

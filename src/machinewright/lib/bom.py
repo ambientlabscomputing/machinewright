@@ -20,6 +20,8 @@ class BOMLineV1(Contract):
     parameters: dict
     manufacturer_part: dict | None = None
     material: str | None = None
+    # `lib.materials.Process` value of the part's material (PRINTED, PURCHASED, ...).
+    material_process: str | None = None
     process: dict | None = None
     finishes: tuple[dict, ...] = ()
     inspections: tuple[dict, ...] = ()
@@ -64,6 +66,7 @@ def generate_structured_bom(graph: ResolvedHardwareGraph) -> BOM:
                     else None
                 ),
                 material=item.material_name,
+                material_process=item.material_process,
                 process=item.process.model_dump(mode="json") if item.process else None,
                 finishes=tuple(
                     value.model_dump(mode="json") for value in item.finishes

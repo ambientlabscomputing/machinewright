@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file machinewright_worker.proto.
  */
 export const file_machinewright_worker: GenFile = /*@__PURE__*/
-  fileDesc("ChptYWNoaW5ld3JpZ2h0X3dvcmtlci5wcm90bxIXbWFjaGluZXdyaWdodC53b3JrZXIudjEiNwoFSGVsbG8SGAoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoDRIUCgxjYXBhYmlsaXRpZXMYAiADKAkiNwoNU291cmNlT3ZlcmxheRIVCg1yZWxhdGl2ZV9wYXRoGAEgASgJEg8KB2NvbnRlbnQYAiABKAwigwIKD0V2YWx1YXRlUHJvamVjdBISCgpzZXNzaW9uX2lkGAEgASgJEhIKCmdlbmVyYXRpb24YAiABKAQSFAoMcHJvamVjdF9yb290GAMgASgJEhMKC3RlbXBsYXRlX2lkGAQgASgJEhgKEHRlbXBsYXRlX3ZlcnNpb24YBSABKAkSEwoLaW5wdXRzX2pzb24YBiABKAwSGAoQb3V0cHV0X2RpcmVjdG9yeRgHIAEoCRI4CghvdmVybGF5cxgIIAMoCzImLm1hY2hpbmV3cmlnaHQud29ya2VyLnYxLlNvdXJjZU92ZXJsYXkSGgoSZW52aXJvbm1lbnRfZGlnZXN0GAkgASgJIjoKEENhbmNlbEV2YWx1YXRpb24SEgoKc2Vzc2lvbl9pZBgBIAEoCRISCgpnZW5lcmF0aW9uGAIgASgEIgoKCFNodXRkb3duIjgKD1N3ZWVwQ29vcmRpbmF0ZRIWCg5wYXJhbWV0ZXJfcGF0aBgBIAEoCRINCgV2YWx1ZRgCIAEoASLhAgoSRXZhbHVhdGVTd2VlcFBvaW50EhIKCnNlc3Npb25faWQYASABKAkSEAoIc3dlZXBfaWQYAiABKAQSEwoLcG9pbnRfaW5kZXgYAyABKA0SPQoLY29vcmRpbmF0ZXMYBCADKAsyKC5tYWNoaW5ld3JpZ2h0Lndvcmtlci52MS5Td2VlcENvb3JkaW5hdGUSFAoMcHJvamVjdF9yb290GAUgASgJEhMKC3RlbXBsYXRlX2lkGAYgASgJEhgKEHRlbXBsYXRlX3ZlcnNpb24YByABKAkSHAoUYmFzZWxpbmVfaW5wdXRzX2pzb24YCCABKAwSGAoQb3V0cHV0X2RpcmVjdG9yeRgJIAEoCRI4CghvdmVybGF5cxgKIAMoCzImLm1hY2hpbmV3cmlnaHQud29ya2VyLnYxLlNvdXJjZU92ZXJsYXkSGgoSZW52aXJvbm1lbnRfZGlnZXN0GAsgASgJIjMKC0NhbmNlbFN3ZWVwEhIKCnNlc3Npb25faWQYASABKAkSEAoIc3dlZXBfaWQYAiABKAQiiAMKDVdvcmtlclJlcXVlc3QSLwoFaGVsbG8YASABKAsyHi5tYWNoaW5ld3JpZ2h0Lndvcmtlci52MS5IZWxsb0gAEjwKCGV2YWx1YXRlGAIgASgLMigubWFjaGluZXdyaWdodC53b3JrZXIudjEuRXZhbHVhdGVQcm9qZWN0SAASOwoGY2FuY2VsGAMgASgLMikubWFjaGluZXdyaWdodC53b3JrZXIudjEuQ2FuY2VsRXZhbHVhdGlvbkgAEjUKCHNodXRkb3duGAQgASgLMiEubWFjaGluZXdyaWdodC53b3JrZXIudjEuU2h1dGRvd25IABJLChRldmFsdWF0ZV9zd2VlcF9wb2ludBgFIAEoCzIrLm1hY2hpbmV3cmlnaHQud29ya2VyLnYxLkV2YWx1YXRlU3dlZXBQb2ludEgAEjwKDGNhbmNlbF9zd2VlcBgGIAEoCzIkLm1hY2hpbmV3cmlnaHQud29ya2VyLnYxLkNhbmNlbFN3ZWVwSABCCQoHcmVxdWVzdCK/AQoQQ2FwYWJpbGl0eVJlcG9ydBIYChBwcm90b2NvbF92ZXJzaW9uGAEgASgNEhQKDGNhcGFiaWxpdGllcxgCIAMoCRIWCg5weXRob25fdmVyc2lvbhgDIAEoCRITCgtpbnRlcnByZXRlchgEIAEoCRIdChVtYWNoaW5ld3JpZ2h0X3ZlcnNpb24YBSABKAkSGwoTY2FkX2JhY2tlbmRfdmVyc2lvbhgGIAEoCRISCgp0cmFuc3BvcnRzGAcgAygJIn4KEkV2YWx1YXRpb25Qcm9ncmVzcxISCgpzZXNzaW9uX2lkGAEgASgJEhIKCmdlbmVyYXRpb24YAiABKAQSDQoFc3RhZ2UYAyABKAkSEQoJY29tcGxldGVkGAQgASgNEg0KBXRvdGFsGAUgASgNEg8KB21lc3NhZ2UYBiABKAkiVgoSUGFydGlhbERpYWdub3N0aWNzEhIKCnNlc3Npb25faWQYASABKAkSEgoKZ2VuZXJhdGlvbhgCIAEoBBIYChBkaWFnbm9zdGljc19qc29uGAMgASgMIjUKDFNvdXJjZURpZ2VzdBIVCg1yZWxhdGl2ZV9wYXRoGAEgASgJEg4KBmRpZ2VzdBgCIAEoCSLOAQoTRXZhbHVhdGlvbkNvbXBsZXRlZBISCgpzZXNzaW9uX2lkGAEgASgJEhIKCmdlbmVyYXRpb24YAiABKAQSFQoNc25hcHNob3RfcGF0aBgDIAEoCRIUCgxncmFwaF9kaWdlc3QYBCABKAkSIAoYYXJ0aWZhY3RfbWFuaWZlc3RfZGlnZXN0GAUgASgJEkAKEWV2YWx1YXRlZF9zb3VyY2VzGAYgAygLMiUubWFjaGluZXdyaWdodC53b3JrZXIudjEuU291cmNlRGlnZXN0IoYBChBFdmFsdWF0aW9uRmFpbGVkEhIKCnNlc3Npb25faWQYASABKAkSEgoKZ2VuZXJhdGlvbhgCIAEoBBIMCgRjb2RlGAMgASgJEg8KB21lc3NhZ2UYBCABKAkSEQoJdHJhY2ViYWNrGAUgASgJEhgKEGRpYWdub3N0aWNzX2pzb24YBiABKAwiPQoTRXZhbHVhdGlvbkNhbmNlbGxlZBISCgpzZXNzaW9uX2lkGAEgASgJEhIKCmdlbmVyYXRpb24YAiABKAQinwEKE1N3ZWVwUG9pbnRDb21wbGV0ZWQSEgoKc2Vzc2lvbl9pZBgBIAEoCRIQCghzd2VlcF9pZBgCIAEoBBITCgtwb2ludF9pbmRleBgDIAEoDRIVCg1zbmFwc2hvdF9wYXRoGAQgASgJEhQKDGdyYXBoX2RpZ2VzdBgFIAEoCRIgChhhcnRpZmFjdF9tYW5pZmVzdF9kaWdlc3QYBiABKAkibAoQU3dlZXBQb2ludEZhaWxlZBISCgpzZXNzaW9uX2lkGAEgASgJEhAKCHN3ZWVwX2lkGAIgASgEEhMKC3BvaW50X2luZGV4GAMgASgNEgwKBGNvZGUYBCABKAkSDwoHbWVzc2FnZRgFIAEoCSJQChNTd2VlcFBvaW50Q2FuY2VsbGVkEhIKCnNlc3Npb25faWQYASABKAkSEAoIc3dlZXBfaWQYAiABKAQSEwoLcG9pbnRfaW5kZXgYAyABKA0iVAoVRXZhbHVhdGlvbklucHV0U2NoZW1hEhIKCnNlc3Npb25faWQYASABKAkSEgoKZ2VuZXJhdGlvbhgCIAEoBBITCgtzY2hlbWFfanNvbhgDIAEoDCLQBQoLV29ya2VyRXZlbnQSQQoMY2FwYWJpbGl0aWVzGAEgASgLMikubWFjaGluZXdyaWdodC53b3JrZXIudjEuQ2FwYWJpbGl0eVJlcG9ydEgAEj8KCHByb2dyZXNzGAIgASgLMisubWFjaGluZXdyaWdodC53b3JrZXIudjEuRXZhbHVhdGlvblByb2dyZXNzSAASQgoLZGlhZ25vc3RpY3MYAyABKAsyKy5tYWNoaW5ld3JpZ2h0Lndvcmtlci52MS5QYXJ0aWFsRGlhZ25vc3RpY3NIABJBCgljb21wbGV0ZWQYBCABKAsyLC5tYWNoaW5ld3JpZ2h0Lndvcmtlci52MS5FdmFsdWF0aW9uQ29tcGxldGVkSAASOwoGZmFpbGVkGAUgASgLMikubWFjaGluZXdyaWdodC53b3JrZXIudjEuRXZhbHVhdGlvbkZhaWxlZEgAEkEKCWNhbmNlbGxlZBgGIAEoCzIsLm1hY2hpbmV3cmlnaHQud29ya2VyLnYxLkV2YWx1YXRpb25DYW5jZWxsZWRIABJNChVzd2VlcF9wb2ludF9jb21wbGV0ZWQYByABKAsyLC5tYWNoaW5ld3JpZ2h0Lndvcmtlci52MS5Td2VlcFBvaW50Q29tcGxldGVkSAASRwoSc3dlZXBfcG9pbnRfZmFpbGVkGAggASgLMikubWFjaGluZXdyaWdodC53b3JrZXIudjEuU3dlZXBQb2ludEZhaWxlZEgAEk0KFXN3ZWVwX3BvaW50X2NhbmNlbGxlZBgJIAEoCzIsLm1hY2hpbmV3cmlnaHQud29ya2VyLnYxLlN3ZWVwUG9pbnRDYW5jZWxsZWRIABJGCgxpbnB1dF9zY2hlbWEYCiABKAsyLi5tYWNoaW5ld3JpZ2h0Lndvcmtlci52MS5FdmFsdWF0aW9uSW5wdXRTY2hlbWFIAEIHCgVldmVudGIGcHJvdG8z");
+  fileDesc("ChptYWNoaW5ld3JpZ2h0X3dvcmtlci5wcm90bxIXbWFjaGluZXdyaWdodC53b3JrZXIudjEiNwoFSGVsbG8SGAoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoDRIUCgxjYXBhYmlsaXRpZXMYAiADKAkiNwoNU291cmNlT3ZlcmxheRIVCg1yZWxhdGl2ZV9wYXRoGAEgASgJEg8KB2NvbnRlbnQYAiABKAwigwIKD0V2YWx1YXRlUHJvamVjdBISCgpzZXNzaW9uX2lkGAEgASgJEhIKCmdlbmVyYXRpb24YAiABKAQSFAoMcHJvamVjdF9yb290GAMgASgJEhMKC3RlbXBsYXRlX2lkGAQgASgJEhgKEHRlbXBsYXRlX3ZlcnNpb24YBSABKAkSEwoLaW5wdXRzX2pzb24YBiABKAwSGAoQb3V0cHV0X2RpcmVjdG9yeRgHIAEoCRI4CghvdmVybGF5cxgIIAMoCzImLm1hY2hpbmV3cmlnaHQud29ya2VyLnYxLlNvdXJjZU92ZXJsYXkSGgoSZW52aXJvbm1lbnRfZGlnZXN0GAkgASgJIjoKEENhbmNlbEV2YWx1YXRpb24SEgoKc2Vzc2lvbl9pZBgBIAEoCRISCgpnZW5lcmF0aW9uGAIgASgEIgoKCFNodXRkb3duIjgKD1N3ZWVwQ29vcmRpbmF0ZRIWCg5wYXJhbWV0ZXJfcGF0aBgBIAEoCRINCgV2YWx1ZRgCIAEoASLhAgoSRXZhbHVhdGVTd2VlcFBvaW50EhIKCnNlc3Npb25faWQYASABKAkSEAoIc3dlZXBfaWQYAiABKAQSEwoLcG9pbnRfaW5kZXgYAyABKA0SPQoLY29vcmRpbmF0ZXMYBCADKAsyKC5tYWNoaW5ld3JpZ2h0Lndvcmtlci52MS5Td2VlcENvb3JkaW5hdGUSFAoMcHJvamVjdF9yb290GAUgASgJEhMKC3RlbXBsYXRlX2lkGAYgASgJEhgKEHRlbXBsYXRlX3ZlcnNpb24YByABKAkSHAoUYmFzZWxpbmVfaW5wdXRzX2pzb24YCCABKAwSGAoQb3V0cHV0X2RpcmVjdG9yeRgJIAEoCRI4CghvdmVybGF5cxgKIAMoCzImLm1hY2hpbmV3cmlnaHQud29ya2VyLnYxLlNvdXJjZU92ZXJsYXkSGgoSZW52aXJvbm1lbnRfZGlnZXN0GAsgASgJIjMKC0NhbmNlbFN3ZWVwEhIKCnNlc3Npb25faWQYASABKAkSEAoIc3dlZXBfaWQYAiABKAQisgIKDFJ1bkV4cG9ydEpvYhISCgpzZXNzaW9uX2lkGAEgASgJEg4KBmpvYl9pZBgCIAEoBBIUCgxwcm9qZWN0X3Jvb3QYAyABKAkSEwoLdGVtcGxhdGVfaWQYBCABKAkSGAoQdGVtcGxhdGVfdmVyc2lvbhgFIAEoCRITCgtpbnB1dHNfanNvbhgGIAEoDBI4CghvdmVybGF5cxgHIAMoCzImLm1hY2hpbmV3cmlnaHQud29ya2VyLnYxLlNvdXJjZU92ZXJsYXkSGgoSZW52aXJvbm1lbnRfZGlnZXN0GAggASgJEgwKBGtpbmQYCSABKAkSGAoQb3V0cHV0X2RpcmVjdG9yeRgKIAEoCRIUCgxvcHRpb25zX2pzb24YCyABKAwSEAoIYmFzZW5hbWUYDCABKAkiNQoPQ2FuY2VsRXhwb3J0Sm9iEhIKCnNlc3Npb25faWQYASABKAkSDgoGam9iX2lkGAIgASgEIpAECg1Xb3JrZXJSZXF1ZXN0Ei8KBWhlbGxvGAEgASgLMh4ubWFjaGluZXdyaWdodC53b3JrZXIudjEuSGVsbG9IABI8CghldmFsdWF0ZRgCIAEoCzIoLm1hY2hpbmV3cmlnaHQud29ya2VyLnYxLkV2YWx1YXRlUHJvamVjdEgAEjsKBmNhbmNlbBgDIAEoCzIpLm1hY2hpbmV3cmlnaHQud29ya2VyLnYxLkNhbmNlbEV2YWx1YXRpb25IABI1CghzaHV0ZG93bhgEIAEoCzIhLm1hY2hpbmV3cmlnaHQud29ya2VyLnYxLlNodXRkb3duSAASSwoUZXZhbHVhdGVfc3dlZXBfcG9pbnQYBSABKAsyKy5tYWNoaW5ld3JpZ2h0Lndvcmtlci52MS5FdmFsdWF0ZVN3ZWVwUG9pbnRIABI8CgxjYW5jZWxfc3dlZXAYBiABKAsyJC5tYWNoaW5ld3JpZ2h0Lndvcmtlci52MS5DYW5jZWxTd2VlcEgAEj8KDnJ1bl9leHBvcnRfam9iGAcgASgLMiUubWFjaGluZXdyaWdodC53b3JrZXIudjEuUnVuRXhwb3J0Sm9iSAASRQoRY2FuY2VsX2V4cG9ydF9qb2IYCCABKAsyKC5tYWNoaW5ld3JpZ2h0Lndvcmtlci52MS5DYW5jZWxFeHBvcnRKb2JIAEIJCgdyZXF1ZXN0Ir8BChBDYXBhYmlsaXR5UmVwb3J0EhgKEHByb3RvY29sX3ZlcnNpb24YASABKA0SFAoMY2FwYWJpbGl0aWVzGAIgAygJEhYKDnB5dGhvbl92ZXJzaW9uGAMgASgJEhMKC2ludGVycHJldGVyGAQgASgJEh0KFW1hY2hpbmV3cmlnaHRfdmVyc2lvbhgFIAEoCRIbChNjYWRfYmFja2VuZF92ZXJzaW9uGAYgASgJEhIKCnRyYW5zcG9ydHMYByADKAkifgoSRXZhbHVhdGlvblByb2dyZXNzEhIKCnNlc3Npb25faWQYASABKAkSEgoKZ2VuZXJhdGlvbhgCIAEoBBINCgVzdGFnZRgDIAEoCRIRCgljb21wbGV0ZWQYBCABKA0SDQoFdG90YWwYBSABKA0SDwoHbWVzc2FnZRgGIAEoCSJWChJQYXJ0aWFsRGlhZ25vc3RpY3MSEgoKc2Vzc2lvbl9pZBgBIAEoCRISCgpnZW5lcmF0aW9uGAIgASgEEhgKEGRpYWdub3N0aWNzX2pzb24YAyABKAwiNQoMU291cmNlRGlnZXN0EhUKDXJlbGF0aXZlX3BhdGgYASABKAkSDgoGZGlnZXN0GAIgASgJIs4BChNFdmFsdWF0aW9uQ29tcGxldGVkEhIKCnNlc3Npb25faWQYASABKAkSEgoKZ2VuZXJhdGlvbhgCIAEoBBIVCg1zbmFwc2hvdF9wYXRoGAMgASgJEhQKDGdyYXBoX2RpZ2VzdBgEIAEoCRIgChhhcnRpZmFjdF9tYW5pZmVzdF9kaWdlc3QYBSABKAkSQAoRZXZhbHVhdGVkX3NvdXJjZXMYBiADKAsyJS5tYWNoaW5ld3JpZ2h0Lndvcmtlci52MS5Tb3VyY2VEaWdlc3QihgEKEEV2YWx1YXRpb25GYWlsZWQSEgoKc2Vzc2lvbl9pZBgBIAEoCRISCgpnZW5lcmF0aW9uGAIgASgEEgwKBGNvZGUYAyABKAkSDwoHbWVzc2FnZRgEIAEoCRIRCgl0cmFjZWJhY2sYBSABKAkSGAoQZGlhZ25vc3RpY3NfanNvbhgGIAEoDCI9ChNFdmFsdWF0aW9uQ2FuY2VsbGVkEhIKCnNlc3Npb25faWQYASABKAkSEgoKZ2VuZXJhdGlvbhgCIAEoBCKfAQoTU3dlZXBQb2ludENvbXBsZXRlZBISCgpzZXNzaW9uX2lkGAEgASgJEhAKCHN3ZWVwX2lkGAIgASgEEhMKC3BvaW50X2luZGV4GAMgASgNEhUKDXNuYXBzaG90X3BhdGgYBCABKAkSFAoMZ3JhcGhfZGlnZXN0GAUgASgJEiAKGGFydGlmYWN0X21hbmlmZXN0X2RpZ2VzdBgGIAEoCSJsChBTd2VlcFBvaW50RmFpbGVkEhIKCnNlc3Npb25faWQYASABKAkSEAoIc3dlZXBfaWQYAiABKAQSEwoLcG9pbnRfaW5kZXgYAyABKA0SDAoEY29kZRgEIAEoCRIPCgdtZXNzYWdlGAUgASgJIlAKE1N3ZWVwUG9pbnRDYW5jZWxsZWQSEgoKc2Vzc2lvbl9pZBgBIAEoCRIQCghzd2VlcF9pZBgCIAEoBBITCgtwb2ludF9pbmRleBgDIAEoDSJUChVFdmFsdWF0aW9uSW5wdXRTY2hlbWESEgoKc2Vzc2lvbl9pZBgBIAEoCRISCgpnZW5lcmF0aW9uGAIgASgEEhMKC3NjaGVtYV9qc29uGAMgASgMInkKEUV4cG9ydEpvYlByb2dyZXNzEhIKCnNlc3Npb25faWQYASABKAkSDgoGam9iX2lkGAIgASgEEg0KBXN0YWdlGAMgASgJEhEKCWNvbXBsZXRlZBgEIAEoDRINCgV0b3RhbBgFIAEoDRIPCgdtZXNzYWdlGAYgASgJImcKEkV4cG9ydEpvYkNvbXBsZXRlZBISCgpzZXNzaW9uX2lkGAEgASgJEg4KBmpvYl9pZBgCIAEoBBIYChBvdXRwdXRfZGlyZWN0b3J5GAMgASgJEhMKC3Jlc3VsdF9qc29uGAQgASgMImcKD0V4cG9ydEpvYkZhaWxlZBISCgpzZXNzaW9uX2lkGAEgASgJEg4KBmpvYl9pZBgCIAEoBBIMCgRjb2RlGAMgASgJEg8KB21lc3NhZ2UYBCABKAkSEQoJdHJhY2ViYWNrGAUgASgJIjgKEkV4cG9ydEpvYkNhbmNlbGxlZBISCgpzZXNzaW9uX2lkGAEgASgJEg4KBmpvYl9pZBgCIAEoBCLsBwoLV29ya2VyRXZlbnQSQQoMY2FwYWJpbGl0aWVzGAEgASgLMikubWFjaGluZXdyaWdodC53b3JrZXIudjEuQ2FwYWJpbGl0eVJlcG9ydEgAEj8KCHByb2dyZXNzGAIgASgLMisubWFjaGluZXdyaWdodC53b3JrZXIudjEuRXZhbHVhdGlvblByb2dyZXNzSAASQgoLZGlhZ25vc3RpY3MYAyABKAsyKy5tYWNoaW5ld3JpZ2h0Lndvcmtlci52MS5QYXJ0aWFsRGlhZ25vc3RpY3NIABJBCgljb21wbGV0ZWQYBCABKAsyLC5tYWNoaW5ld3JpZ2h0Lndvcmtlci52MS5FdmFsdWF0aW9uQ29tcGxldGVkSAASOwoGZmFpbGVkGAUgASgLMikubWFjaGluZXdyaWdodC53b3JrZXIudjEuRXZhbHVhdGlvbkZhaWxlZEgAEkEKCWNhbmNlbGxlZBgGIAEoCzIsLm1hY2hpbmV3cmlnaHQud29ya2VyLnYxLkV2YWx1YXRpb25DYW5jZWxsZWRIABJNChVzd2VlcF9wb2ludF9jb21wbGV0ZWQYByABKAsyLC5tYWNoaW5ld3JpZ2h0Lndvcmtlci52MS5Td2VlcFBvaW50Q29tcGxldGVkSAASRwoSc3dlZXBfcG9pbnRfZmFpbGVkGAggASgLMikubWFjaGluZXdyaWdodC53b3JrZXIudjEuU3dlZXBQb2ludEZhaWxlZEgAEk0KFXN3ZWVwX3BvaW50X2NhbmNlbGxlZBgJIAEoCzIsLm1hY2hpbmV3cmlnaHQud29ya2VyLnYxLlN3ZWVwUG9pbnRDYW5jZWxsZWRIABJGCgxpbnB1dF9zY2hlbWEYCiABKAsyLi5tYWNoaW5ld3JpZ2h0Lndvcmtlci52MS5FdmFsdWF0aW9uSW5wdXRTY2hlbWFIABJFCg9leHBvcnRfcHJvZ3Jlc3MYCyABKAsyKi5tYWNoaW5ld3JpZ2h0Lndvcmtlci52MS5FeHBvcnRKb2JQcm9ncmVzc0gAEkcKEGV4cG9ydF9jb21wbGV0ZWQYDCABKAsyKy5tYWNoaW5ld3JpZ2h0Lndvcmtlci52MS5FeHBvcnRKb2JDb21wbGV0ZWRIABJBCg1leHBvcnRfZmFpbGVkGA0gASgLMigubWFjaGluZXdyaWdodC53b3JrZXIudjEuRXhwb3J0Sm9iRmFpbGVkSAASRwoQZXhwb3J0X2NhbmNlbGxlZBgOIAEoCzIrLm1hY2hpbmV3cmlnaHQud29ya2VyLnYxLkV4cG9ydEpvYkNhbmNlbGxlZEgAQgcKBWV2ZW50YgZwcm90bzM");
 
 /**
  * @generated from message machinewright.worker.v1.Hello
@@ -267,6 +267,105 @@ export const CancelSweepSchema: GenMessage<CancelSweep> = /*@__PURE__*/
   messageDesc(file_machinewright_worker, 7);
 
 /**
+ * Export jobs: on-demand exports into a user-chosen folder, addressed by
+ * (session_id, job_id) rather than an evaluation generation so they never
+ * interfere with the live-preview evaluation stream. `kind` is "parts" or
+ * "print_plan"; `options_json` is that kind's options document.
+ *
+ * @generated from message machinewright.worker.v1.RunExportJob
+ */
+export type RunExportJob = Message<"machinewright.worker.v1.RunExportJob"> & {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: uint64 job_id = 2;
+   */
+  jobId: bigint;
+
+  /**
+   * @generated from field: string project_root = 3;
+   */
+  projectRoot: string;
+
+  /**
+   * @generated from field: string template_id = 4;
+   */
+  templateId: string;
+
+  /**
+   * @generated from field: string template_version = 5;
+   */
+  templateVersion: string;
+
+  /**
+   * @generated from field: bytes inputs_json = 6;
+   */
+  inputsJson: Uint8Array;
+
+  /**
+   * @generated from field: repeated machinewright.worker.v1.SourceOverlay overlays = 7;
+   */
+  overlays: SourceOverlay[];
+
+  /**
+   * @generated from field: string environment_digest = 8;
+   */
+  environmentDigest: string;
+
+  /**
+   * @generated from field: string kind = 9;
+   */
+  kind: string;
+
+  /**
+   * @generated from field: string output_directory = 10;
+   */
+  outputDirectory: string;
+
+  /**
+   * @generated from field: bytes options_json = 11;
+   */
+  optionsJson: Uint8Array;
+
+  /**
+   * @generated from field: string basename = 12;
+   */
+  basename: string;
+};
+
+/**
+ * Describes the message machinewright.worker.v1.RunExportJob.
+ * Use `create(RunExportJobSchema)` to create a new message.
+ */
+export const RunExportJobSchema: GenMessage<RunExportJob> = /*@__PURE__*/
+  messageDesc(file_machinewright_worker, 8);
+
+/**
+ * @generated from message machinewright.worker.v1.CancelExportJob
+ */
+export type CancelExportJob = Message<"machinewright.worker.v1.CancelExportJob"> & {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: uint64 job_id = 2;
+   */
+  jobId: bigint;
+};
+
+/**
+ * Describes the message machinewright.worker.v1.CancelExportJob.
+ * Use `create(CancelExportJobSchema)` to create a new message.
+ */
+export const CancelExportJobSchema: GenMessage<CancelExportJob> = /*@__PURE__*/
+  messageDesc(file_machinewright_worker, 9);
+
+/**
  * @generated from message machinewright.worker.v1.WorkerRequest
  */
 export type WorkerRequest = Message<"machinewright.worker.v1.WorkerRequest"> & {
@@ -309,6 +408,18 @@ export type WorkerRequest = Message<"machinewright.worker.v1.WorkerRequest"> & {
      */
     value: CancelSweep;
     case: "cancelSweep";
+  } | {
+    /**
+     * @generated from field: machinewright.worker.v1.RunExportJob run_export_job = 7;
+     */
+    value: RunExportJob;
+    case: "runExportJob";
+  } | {
+    /**
+     * @generated from field: machinewright.worker.v1.CancelExportJob cancel_export_job = 8;
+     */
+    value: CancelExportJob;
+    case: "cancelExportJob";
   } | { case: undefined; value?: undefined };
 };
 
@@ -317,7 +428,7 @@ export type WorkerRequest = Message<"machinewright.worker.v1.WorkerRequest"> & {
  * Use `create(WorkerRequestSchema)` to create a new message.
  */
 export const WorkerRequestSchema: GenMessage<WorkerRequest> = /*@__PURE__*/
-  messageDesc(file_machinewright_worker, 8);
+  messageDesc(file_machinewright_worker, 10);
 
 /**
  * @generated from message machinewright.worker.v1.CapabilityReport
@@ -364,7 +475,7 @@ export type CapabilityReport = Message<"machinewright.worker.v1.CapabilityReport
  * Use `create(CapabilityReportSchema)` to create a new message.
  */
 export const CapabilityReportSchema: GenMessage<CapabilityReport> = /*@__PURE__*/
-  messageDesc(file_machinewright_worker, 9);
+  messageDesc(file_machinewright_worker, 11);
 
 /**
  * @generated from message machinewright.worker.v1.EvaluationProgress
@@ -406,7 +517,7 @@ export type EvaluationProgress = Message<"machinewright.worker.v1.EvaluationProg
  * Use `create(EvaluationProgressSchema)` to create a new message.
  */
 export const EvaluationProgressSchema: GenMessage<EvaluationProgress> = /*@__PURE__*/
-  messageDesc(file_machinewright_worker, 10);
+  messageDesc(file_machinewright_worker, 12);
 
 /**
  * @generated from message machinewright.worker.v1.PartialDiagnostics
@@ -433,7 +544,7 @@ export type PartialDiagnostics = Message<"machinewright.worker.v1.PartialDiagnos
  * Use `create(PartialDiagnosticsSchema)` to create a new message.
  */
 export const PartialDiagnosticsSchema: GenMessage<PartialDiagnostics> = /*@__PURE__*/
-  messageDesc(file_machinewright_worker, 11);
+  messageDesc(file_machinewright_worker, 13);
 
 /**
  * @generated from message machinewright.worker.v1.SourceDigest
@@ -455,7 +566,7 @@ export type SourceDigest = Message<"machinewright.worker.v1.SourceDigest"> & {
  * Use `create(SourceDigestSchema)` to create a new message.
  */
 export const SourceDigestSchema: GenMessage<SourceDigest> = /*@__PURE__*/
-  messageDesc(file_machinewright_worker, 12);
+  messageDesc(file_machinewright_worker, 14);
 
 /**
  * @generated from message machinewright.worker.v1.EvaluationCompleted
@@ -504,7 +615,7 @@ export type EvaluationCompleted = Message<"machinewright.worker.v1.EvaluationCom
  * Use `create(EvaluationCompletedSchema)` to create a new message.
  */
 export const EvaluationCompletedSchema: GenMessage<EvaluationCompleted> = /*@__PURE__*/
-  messageDesc(file_machinewright_worker, 13);
+  messageDesc(file_machinewright_worker, 15);
 
 /**
  * @generated from message machinewright.worker.v1.EvaluationFailed
@@ -546,7 +657,7 @@ export type EvaluationFailed = Message<"machinewright.worker.v1.EvaluationFailed
  * Use `create(EvaluationFailedSchema)` to create a new message.
  */
 export const EvaluationFailedSchema: GenMessage<EvaluationFailed> = /*@__PURE__*/
-  messageDesc(file_machinewright_worker, 14);
+  messageDesc(file_machinewright_worker, 16);
 
 /**
  * @generated from message machinewright.worker.v1.EvaluationCancelled
@@ -568,7 +679,7 @@ export type EvaluationCancelled = Message<"machinewright.worker.v1.EvaluationCan
  * Use `create(EvaluationCancelledSchema)` to create a new message.
  */
 export const EvaluationCancelledSchema: GenMessage<EvaluationCancelled> = /*@__PURE__*/
-  messageDesc(file_machinewright_worker, 15);
+  messageDesc(file_machinewright_worker, 17);
 
 /**
  * @generated from message machinewright.worker.v1.SweepPointCompleted
@@ -610,7 +721,7 @@ export type SweepPointCompleted = Message<"machinewright.worker.v1.SweepPointCom
  * Use `create(SweepPointCompletedSchema)` to create a new message.
  */
 export const SweepPointCompletedSchema: GenMessage<SweepPointCompleted> = /*@__PURE__*/
-  messageDesc(file_machinewright_worker, 16);
+  messageDesc(file_machinewright_worker, 18);
 
 /**
  * @generated from message machinewright.worker.v1.SweepPointFailed
@@ -647,7 +758,7 @@ export type SweepPointFailed = Message<"machinewright.worker.v1.SweepPointFailed
  * Use `create(SweepPointFailedSchema)` to create a new message.
  */
 export const SweepPointFailedSchema: GenMessage<SweepPointFailed> = /*@__PURE__*/
-  messageDesc(file_machinewright_worker, 17);
+  messageDesc(file_machinewright_worker, 19);
 
 /**
  * @generated from message machinewright.worker.v1.SweepPointCancelled
@@ -674,7 +785,7 @@ export type SweepPointCancelled = Message<"machinewright.worker.v1.SweepPointCan
  * Use `create(SweepPointCancelledSchema)` to create a new message.
  */
 export const SweepPointCancelledSchema: GenMessage<SweepPointCancelled> = /*@__PURE__*/
-  messageDesc(file_machinewright_worker, 18);
+  messageDesc(file_machinewright_worker, 20);
 
 /**
  * @generated from message machinewright.worker.v1.EvaluationInputSchema
@@ -701,7 +812,140 @@ export type EvaluationInputSchema = Message<"machinewright.worker.v1.EvaluationI
  * Use `create(EvaluationInputSchemaSchema)` to create a new message.
  */
 export const EvaluationInputSchemaSchema: GenMessage<EvaluationInputSchema> = /*@__PURE__*/
-  messageDesc(file_machinewright_worker, 19);
+  messageDesc(file_machinewright_worker, 21);
+
+/**
+ * @generated from message machinewright.worker.v1.ExportJobProgress
+ */
+export type ExportJobProgress = Message<"machinewright.worker.v1.ExportJobProgress"> & {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: uint64 job_id = 2;
+   */
+  jobId: bigint;
+
+  /**
+   * @generated from field: string stage = 3;
+   */
+  stage: string;
+
+  /**
+   * @generated from field: uint32 completed = 4;
+   */
+  completed: number;
+
+  /**
+   * @generated from field: uint32 total = 5;
+   */
+  total: number;
+
+  /**
+   * @generated from field: string message = 6;
+   */
+  message: string;
+};
+
+/**
+ * Describes the message machinewright.worker.v1.ExportJobProgress.
+ * Use `create(ExportJobProgressSchema)` to create a new message.
+ */
+export const ExportJobProgressSchema: GenMessage<ExportJobProgress> = /*@__PURE__*/
+  messageDesc(file_machinewright_worker, 22);
+
+/**
+ * @generated from message machinewright.worker.v1.ExportJobCompleted
+ */
+export type ExportJobCompleted = Message<"machinewright.worker.v1.ExportJobCompleted"> & {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: uint64 job_id = 2;
+   */
+  jobId: bigint;
+
+  /**
+   * @generated from field: string output_directory = 3;
+   */
+  outputDirectory: string;
+
+  /**
+   * @generated from field: bytes result_json = 4;
+   */
+  resultJson: Uint8Array;
+};
+
+/**
+ * Describes the message machinewright.worker.v1.ExportJobCompleted.
+ * Use `create(ExportJobCompletedSchema)` to create a new message.
+ */
+export const ExportJobCompletedSchema: GenMessage<ExportJobCompleted> = /*@__PURE__*/
+  messageDesc(file_machinewright_worker, 23);
+
+/**
+ * @generated from message machinewright.worker.v1.ExportJobFailed
+ */
+export type ExportJobFailed = Message<"machinewright.worker.v1.ExportJobFailed"> & {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: uint64 job_id = 2;
+   */
+  jobId: bigint;
+
+  /**
+   * @generated from field: string code = 3;
+   */
+  code: string;
+
+  /**
+   * @generated from field: string message = 4;
+   */
+  message: string;
+
+  /**
+   * @generated from field: string traceback = 5;
+   */
+  traceback: string;
+};
+
+/**
+ * Describes the message machinewright.worker.v1.ExportJobFailed.
+ * Use `create(ExportJobFailedSchema)` to create a new message.
+ */
+export const ExportJobFailedSchema: GenMessage<ExportJobFailed> = /*@__PURE__*/
+  messageDesc(file_machinewright_worker, 24);
+
+/**
+ * @generated from message machinewright.worker.v1.ExportJobCancelled
+ */
+export type ExportJobCancelled = Message<"machinewright.worker.v1.ExportJobCancelled"> & {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: uint64 job_id = 2;
+   */
+  jobId: bigint;
+};
+
+/**
+ * Describes the message machinewright.worker.v1.ExportJobCancelled.
+ * Use `create(ExportJobCancelledSchema)` to create a new message.
+ */
+export const ExportJobCancelledSchema: GenMessage<ExportJobCancelled> = /*@__PURE__*/
+  messageDesc(file_machinewright_worker, 25);
 
 /**
  * @generated from message machinewright.worker.v1.WorkerEvent
@@ -770,6 +1014,30 @@ export type WorkerEvent = Message<"machinewright.worker.v1.WorkerEvent"> & {
      */
     value: EvaluationInputSchema;
     case: "inputSchema";
+  } | {
+    /**
+     * @generated from field: machinewright.worker.v1.ExportJobProgress export_progress = 11;
+     */
+    value: ExportJobProgress;
+    case: "exportProgress";
+  } | {
+    /**
+     * @generated from field: machinewright.worker.v1.ExportJobCompleted export_completed = 12;
+     */
+    value: ExportJobCompleted;
+    case: "exportCompleted";
+  } | {
+    /**
+     * @generated from field: machinewright.worker.v1.ExportJobFailed export_failed = 13;
+     */
+    value: ExportJobFailed;
+    case: "exportFailed";
+  } | {
+    /**
+     * @generated from field: machinewright.worker.v1.ExportJobCancelled export_cancelled = 14;
+     */
+    value: ExportJobCancelled;
+    case: "exportCancelled";
   } | { case: undefined; value?: undefined };
 };
 
@@ -778,5 +1046,5 @@ export type WorkerEvent = Message<"machinewright.worker.v1.WorkerEvent"> & {
  * Use `create(WorkerEventSchema)` to create a new message.
  */
 export const WorkerEventSchema: GenMessage<WorkerEvent> = /*@__PURE__*/
-  messageDesc(file_machinewright_worker, 20);
+  messageDesc(file_machinewright_worker, 26);
 

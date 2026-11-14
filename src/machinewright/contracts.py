@@ -307,7 +307,10 @@ class MotorOperatingPoint(Contract):
             or self.peak_torque.dimension != Dimension.TORQUE
         ):
             raise ValueError("operating-point torque must use torque units")
-        if self.peak_torque.canonical_value() < self.continuous_torque.canonical_value():
+        if (
+            self.peak_torque.canonical_value()
+            < self.continuous_torque.canonical_value()
+        ):
             raise ValueError("peak torque must not be below continuous torque")
         return self
 

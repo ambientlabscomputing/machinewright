@@ -42,6 +42,13 @@ import { resolveNodeIdsInMappings, resolveSpanInMappings } from "../model/source
 import { fromEditorDiagnostics, fromEvaluationFailure, mergeDiagnostics, type StructuredDiagnostic } from "../model/Diagnostics";
 import type { EvaluationSnapshot } from "../model/generated/EvaluationSnapshot";
 import { GraphTree } from "../graph/GraphTree";
+import { buildGraphIndex } from "../graph/GraphIndex";
+import { ExportCoordinator, type ExportJobInput, type ExportJobKind } from "../export/ExportCoordinator";
+import { exportAssemblyFile } from "../export/assemblyExport";
+import { selectedPartIds, type AssemblyFormat } from "../export/exportModel";
+import { ExportDialog, type ExportTab } from "./ExportDialog";
+import { PrintTab } from "./PrintTab";
+import { BomTab } from "./BomTab";
 import { EditorSurfaceView, type EditorSurfaceHandle } from "../editor/EditorHost";
 import { ViewportSurfaceView, type ViewportSurfaceHandle } from "../viewport/ViewportHost";
 import { InputsPanel, parseInputs, setInput, type InputValues } from "./InputsPanel";
@@ -66,6 +73,10 @@ interface ProjectSession {
   readonly coordinator: EvaluationCoordinator;
   readonly snapshotStore: SnapshotStore;
   readonly snapshotInstaller: SnapshotInstaller;
+  /** On-demand exports (parts, print plates) on the same worker as evaluation. */
+  readonly exports: ExportCoordinator;
+  /** A worker export request for the current inputs and unsaved edits, or `null` before a template is declared. */
+  buildExportInput(kind: ExportJobKind, outputDirectory: string, options: unknown, basename: string): ExportJobInput | null;
   readonly lspClient: LspClient;
   readonly lspReady: Promise<boolean>;
   readonly pythonDiagnostics: Map<string, { text: string; items: readonly EditorDiagnostic[] }>;
@@ -99,7 +110,15 @@ async function loadSnapshotJson(snapshotPath: string): Promise<EvaluationSnapsho
   return JSON.parse(await readTextFile(snapshotPath)) as EvaluationSnapshot;
 }
 
-export function AppShell() {
+export type AppView = "workspace" | "print" | "bom";
+
+export interface AppShellProps {
+  /** Which app-level tab is showing; the workspace stays mounted underneath the print tab. */
+  readonly view?: AppView;
+  readonly onViewChange?: (view: AppView) => void;
+}
+
+export function AppShell({ view = "workspace", onViewChange }: AppShellProps = {}) {
   const [session, setSession] = useState<ProjectSession | null>(null);
   const sessionRef = useRef<ProjectSession | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -114,6 +133,15 @@ export function AppShell() {
   const [inputValues, setInputValues] = useState<InputValues>({});
   const [inputError, setInputError] = useState<string | null>(null);
   const [canResetInputs, setCanResetInputs] = useState(false);
+  const [exportDialog, setExportDialog] = useState<{ readonly tab: ExportTab; readonly nonce: number } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  // Mounted on first visit, then kept (hidden) so its plate view and last run survive tab switches.
+  const [printMounted, setPrintMounted] = useState(false);
+  const [bomMounted, setBomMounted] = useState(false);
+  useEffect(() => {
+    if (view === "print") setPrintMounted(true);
+    if (view === "bom") setBomMounted(true);
+  }, [view]);
   const [lspStatus, setLspStatus] = useState<"starting" | "ready" | "unavailable">("starting");
   const navigation = useRef<{ path: string; offset: number; endOffset?: number } | null>(null);
   const [lspDiagnostics, setLspDiagnostics] = useState<readonly StructuredDiagnostic[]>([]);
@@ -158,6 +186,7 @@ export function AppShell() {
     setActiveDocumentPath(null);
     setEditorReady(false);
     setSelection(EMPTY_SELECTION);
+    setExportDialog(null);
     setHealth({ phase: "no_worker" });
     setLspDiagnostics([]);
     return stopped;
@@ -187,6 +216,8 @@ export function AppShell() {
       transport,
       workerExecutablePath: project.workerExecutablePath,
     });
+    let workerCapabilities: readonly string[] = [];
+    const exports = new ExportCoordinator({ transport, capabilities: () => workerCapabilities });
     const cacheClient = createNativeCacheClient();
     const outputDirectory = defaultJoinPath(project.rootPath, ".machinewright", "output");
     const { port: viewportPort, dispatch: dispatchViewportEvent } = buildViewportSurfacePort(viewportRef);
@@ -234,7 +265,25 @@ export function AppShell() {
       coordinator.requestEvaluation(input);
     };
 
+    const buildExportInput: ProjectSession["buildExportInput"] = (kind, outputDirectory, options, basename) => {
+      const template = project.config.templates[0];
+      if (!template) return null;
+      return {
+        projectRoot: project.rootPath,
+        templateId: template.id,
+        templateVersion: template.version,
+        inputsJson: new TextEncoder().encode(JSON.stringify(inputs)),
+        overlays: documentStore.overlaysForEvaluation(),
+        environmentDigest: environmentDigest.current,
+        kind,
+        outputDirectory,
+        options,
+        basename,
+      };
+    };
+
     const unsubscribeHealth = coordinator.onHealthChange((nextHealth) => {
+      if (nextHealth.phase === "idle" || nextHealth.phase === "evaluating") workerCapabilities = nextHealth.capabilities;
       setHealth(nextHealth);
       if (nextHealth.phase === "worker_unhealthy") snapshotStore.setWorkerUnhealthy();
     });
@@ -312,6 +361,8 @@ export function AppShell() {
       coordinator,
       snapshotStore,
       snapshotInstaller,
+      exports,
+      buildExportInput,
       lspClient,
       lspReady,
       pythonDiagnostics,
@@ -339,6 +390,7 @@ export function AppShell() {
         unsubscribeSnapshot();
         unsubscribeDocuments();
         snapshotInstaller.dispose();
+        exports.dispose();
         coordinator.dispose();
         await Promise.allSettled([lspClient.stop(), transport.stop()]);
       },
@@ -551,6 +603,14 @@ export function AppShell() {
     [highlightNodeInEditor],
   );
 
+  const showNodesInViewport = useCallback(
+    (nodeIds: readonly string[]) => {
+      onViewChange?.("workspace");
+      onSelectGraphNode({ nodeIds, primaryNodeId: nodeIds[0] ?? null });
+    },
+    [onSelectGraphNode, onViewChange],
+  );
+
   // --- Command palette, keyboard shortcuts, in-window terminal -------------
   // Shortcuts are intercepted natively (they must work while a WebView owns
   // focus) and dispatched through one `CommandRegistry`; the palette lists
@@ -716,7 +776,40 @@ export function AppShell() {
     if (terminalOpen && terminalMounted) terminalRef.current?.focus();
   }, [terminalOpen, terminalMounted]);
 
+  const graphIndex = useMemo(() => (currentSnapshot ? buildGraphIndex(currentSnapshot.graph) : null), [currentSnapshot]);
+  const selectedParts = useMemo(
+    () => (graphIndex ? selectedPartIds(graphIndex, selection.nodeIds) : []),
+    [graphIndex, selection],
+  );
+  const exportNonce = useRef(0);
+  const openExportDialog = useCallback((tab: ExportTab) => {
+    exportNonce.current += 1;
+    setExportDialog({ tab, nonce: exportNonce.current });
+  }, []);
+
+  // Whole-assembly export straight from the command palette: ask where, copy
+  // the file the last evaluation already wrote, and say what happened.
+  const quickExportAssembly = useCallback(
+    async (format: AssemblyFormat) => {
+      if (!session || !currentSnapshot) return;
+      const result = await exportAssemblyFile({
+        outputDirectory: session.outputDirectory,
+        graphDigest: currentSnapshot.graphDigest,
+        projectId: session.project.config.projectId,
+        format,
+      });
+      if (result.kind === "saved") setNotice(`Exported ${result.path}`);
+    },
+    [session, currentSnapshot],
+  );
+  useEffect(() => {
+    if (notice === null) return;
+    const timer = setTimeout(() => setNotice(null), 8000);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
   const hasProject = session !== null;
+  const hasSnapshot = currentSnapshot !== null;
   const hasActiveDocument = activeDocument !== null;
   const activeDocumentDirty = activeDocument?.dirty === true;
   const registry = useMemo(
@@ -791,11 +884,18 @@ export function AppShell() {
           run: () => setViewportMaximized((value) => !value),
         },
         { id: "view.fitCamera", category: "View", title: "Fit Camera", enabled: hasProject, run: () => viewportRef.current?.fitCamera() },
+        { id: "export.dialog", category: "Export", title: "Export…", shortcut: "Cmd+Shift+E", enabled: hasProject, run: () => openExportDialog("assembly") },
+        { id: "export.step", category: "Export", title: "Export Assembly as STEP…", enabled: hasSnapshot, run: () => quickExportAssembly("step") },
+        { id: "export.stl", category: "Export", title: "Export Assembly as STL…", enabled: hasSnapshot, run: () => quickExportAssembly("stl") },
+        { id: "export.parts", category: "Export", title: "Export Parts…", enabled: hasProject, run: () => openExportDialog("parts") },
+        { id: "export.print", category: "Export", title: "Open 3D Print Plates", enabled: hasProject, run: () => onViewChange?.("print") },
+        { id: "bom.open", category: "View", title: "Open Purchased Parts BOM", enabled: hasProject, run: () => onViewChange?.("bom") },
         { id: "worker.retry", category: "Worker", title: "Retry Worker", enabled: hasProject, run: () => session?.coordinator.retry() },
       ]),
     [
       openPalette, openProject, refreshProjectFiles, createFile, openFile, saveActiveDocument, focusEditor,
-      toggleTerminal, hasProject, hasActiveDocument, activeDocumentDirty, terminalMounted, session,
+      toggleTerminal, hasProject, hasSnapshot, hasActiveDocument, activeDocumentDirty, terminalMounted, session,
+      openExportDialog, quickExportAssembly, onViewChange,
     ],
   );
   const registryRef = useRef(registry);
@@ -843,6 +943,7 @@ export function AppShell() {
             disabled={!session}
           />
           <Button label="Fit Camera" onPress={() => viewportRef.current?.fitCamera()} disabled={!session} />
+          <Button label="Export" onPress={() => openExportDialog("assembly")} disabled={!session} />
           <Text variant="label" tone="secondary">
             {session ? session.project.config.projectId : "No project open"}
           </Text>
@@ -854,6 +955,7 @@ export function AppShell() {
           {currentStatus.kind === "pending" ? <StatusBadge tone="pending" label="Evaluating…" /> : null}
           {currentStatus.kind === "failed" ? <StatusBadge tone="error" label="Evaluation failed" /> : null}
           {openError ? <Text tone="secondary">{openError}</Text> : null}
+          {notice ? <Text variant="label" tone="secondary">{notice}</Text> : null}
         </Stack>
         {saveError ? <Text tone="primary">{saveError}</Text> : null}
       </Panel>
@@ -954,6 +1056,45 @@ export function AppShell() {
         </Resizable>
       ) : null}
       </Stack>
+      {exportDialog && session ? (
+        <ExportDialog
+          key={exportDialog.nonce}
+          initialTab={exportDialog.tab}
+          projectId={session.project.config.projectId}
+          projectRoot={session.project.rootPath}
+          outputDirectory={session.outputDirectory}
+          graphDigest={currentSnapshot?.graphDigest ?? null}
+          selection={selectedParts}
+          coordinator={session.exports}
+          buildJobInput={session.buildExportInput}
+          onClose={() => setExportDialog(null)}
+        />
+      ) : null}
+      {printMounted && session ? (
+        <View
+          style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, display: view === "print" ? "flex" : "none" }}
+        >
+          <Panel surface="display" padding="none" flex={1}>
+            <PrintTab key={session.project.rootPath} projectRoot={session.project.rootPath} coordinator={session.exports} buildJobInput={session.buildExportInput} />
+          </Panel>
+        </View>
+      ) : null}
+      {bomMounted && session ? (
+        <View style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, display: view === "bom" ? "flex" : "none" }}>
+          <Panel surface="display" padding="none" flex={1}>
+            <BomTab
+              key={session.project.rootPath}
+              projectId={session.project.config.projectId}
+              projectRoot={session.project.rootPath}
+              outputDirectory={session.outputDirectory}
+              graphDigest={currentSnapshot?.graphDigest ?? null}
+              onShowInViewport={showNodesInViewport}
+              coordinator={session.exports}
+              buildJobInput={session.buildExportInput}
+            />
+          </Panel>
+        </View>
+      ) : null}
       {palette ? (
         <CommandPalette
           key={palette.nonce}

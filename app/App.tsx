@@ -226,7 +226,7 @@ function DevTools() {
   );
 }
 
-type Screen = "product" | "dev-tools";
+type Screen = "product" | "print" | "bom" | "dev-tools";
 
 function App() {
   const [screen, setScreen] = useState<Screen>("product");
@@ -241,6 +241,18 @@ function App() {
           >
             Machinewright
           </Text>
+          <Text
+            onPress={() => setScreen("print")}
+            style={[styles.tab, screen === "print" && styles.tabActive]}
+          >
+            3D Print
+          </Text>
+          <Text
+            onPress={() => setScreen("bom")}
+            style={[styles.tab, screen === "bom" && styles.tabActive]}
+          >
+            BOM
+          </Text>
           {__DEV__ ? (
             <Text
               onPress={() => setScreen("dev-tools")}
@@ -250,7 +262,14 @@ function App() {
             </Text>
           ) : null}
         </View>
-        {__DEV__ && screen === "dev-tools" ? <DevTools /> : <AppShell />}
+        {/* Kept mounted behind Dev Tools: unmounting would drop the open project, worker session and tab state. */}
+        <View style={screen === "dev-tools" ? styles.hidden : styles.shell}>
+          <AppShell
+            view={screen === "print" ? "print" : screen === "bom" ? "bom" : "workspace"}
+            onViewChange={(view) => setScreen(view === "workspace" ? "product" : view)}
+          />
+        </View>
+        {__DEV__ && screen === "dev-tools" ? <DevTools /> : null}
       </View>
     </SafeAreaProvider>
   );
@@ -258,6 +277,8 @@ function App() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface.workspace },
+  shell: { flex: 1 },
+  hidden: { display: "none" },
   tabBar: {
     flexDirection: "row",
     gap: 16,

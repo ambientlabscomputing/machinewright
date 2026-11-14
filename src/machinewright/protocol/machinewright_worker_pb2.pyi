@@ -97,21 +97,61 @@ class CancelSweep(_message.Message):
     sweep_id: int
     def __init__(self, session_id: _Optional[str] = ..., sweep_id: _Optional[int] = ...) -> None: ...
 
+class RunExportJob(_message.Message):
+    __slots__ = ("session_id", "job_id", "project_root", "template_id", "template_version", "inputs_json", "overlays", "environment_digest", "kind", "output_directory", "options_json", "basename")
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    JOB_ID_FIELD_NUMBER: _ClassVar[int]
+    PROJECT_ROOT_FIELD_NUMBER: _ClassVar[int]
+    TEMPLATE_ID_FIELD_NUMBER: _ClassVar[int]
+    TEMPLATE_VERSION_FIELD_NUMBER: _ClassVar[int]
+    INPUTS_JSON_FIELD_NUMBER: _ClassVar[int]
+    OVERLAYS_FIELD_NUMBER: _ClassVar[int]
+    ENVIRONMENT_DIGEST_FIELD_NUMBER: _ClassVar[int]
+    KIND_FIELD_NUMBER: _ClassVar[int]
+    OUTPUT_DIRECTORY_FIELD_NUMBER: _ClassVar[int]
+    OPTIONS_JSON_FIELD_NUMBER: _ClassVar[int]
+    BASENAME_FIELD_NUMBER: _ClassVar[int]
+    session_id: str
+    job_id: int
+    project_root: str
+    template_id: str
+    template_version: str
+    inputs_json: bytes
+    overlays: _containers.RepeatedCompositeFieldContainer[SourceOverlay]
+    environment_digest: str
+    kind: str
+    output_directory: str
+    options_json: bytes
+    basename: str
+    def __init__(self, session_id: _Optional[str] = ..., job_id: _Optional[int] = ..., project_root: _Optional[str] = ..., template_id: _Optional[str] = ..., template_version: _Optional[str] = ..., inputs_json: _Optional[bytes] = ..., overlays: _Optional[_Iterable[_Union[SourceOverlay, _Mapping]]] = ..., environment_digest: _Optional[str] = ..., kind: _Optional[str] = ..., output_directory: _Optional[str] = ..., options_json: _Optional[bytes] = ..., basename: _Optional[str] = ...) -> None: ...
+
+class CancelExportJob(_message.Message):
+    __slots__ = ("session_id", "job_id")
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    JOB_ID_FIELD_NUMBER: _ClassVar[int]
+    session_id: str
+    job_id: int
+    def __init__(self, session_id: _Optional[str] = ..., job_id: _Optional[int] = ...) -> None: ...
+
 class WorkerRequest(_message.Message):
-    __slots__ = ("hello", "evaluate", "cancel", "shutdown", "evaluate_sweep_point", "cancel_sweep")
+    __slots__ = ("hello", "evaluate", "cancel", "shutdown", "evaluate_sweep_point", "cancel_sweep", "run_export_job", "cancel_export_job")
     HELLO_FIELD_NUMBER: _ClassVar[int]
     EVALUATE_FIELD_NUMBER: _ClassVar[int]
     CANCEL_FIELD_NUMBER: _ClassVar[int]
     SHUTDOWN_FIELD_NUMBER: _ClassVar[int]
     EVALUATE_SWEEP_POINT_FIELD_NUMBER: _ClassVar[int]
     CANCEL_SWEEP_FIELD_NUMBER: _ClassVar[int]
+    RUN_EXPORT_JOB_FIELD_NUMBER: _ClassVar[int]
+    CANCEL_EXPORT_JOB_FIELD_NUMBER: _ClassVar[int]
     hello: Hello
     evaluate: EvaluateProject
     cancel: CancelEvaluation
     shutdown: Shutdown
     evaluate_sweep_point: EvaluateSweepPoint
     cancel_sweep: CancelSweep
-    def __init__(self, hello: _Optional[_Union[Hello, _Mapping]] = ..., evaluate: _Optional[_Union[EvaluateProject, _Mapping]] = ..., cancel: _Optional[_Union[CancelEvaluation, _Mapping]] = ..., shutdown: _Optional[_Union[Shutdown, _Mapping]] = ..., evaluate_sweep_point: _Optional[_Union[EvaluateSweepPoint, _Mapping]] = ..., cancel_sweep: _Optional[_Union[CancelSweep, _Mapping]] = ...) -> None: ...
+    run_export_job: RunExportJob
+    cancel_export_job: CancelExportJob
+    def __init__(self, hello: _Optional[_Union[Hello, _Mapping]] = ..., evaluate: _Optional[_Union[EvaluateProject, _Mapping]] = ..., cancel: _Optional[_Union[CancelEvaluation, _Mapping]] = ..., shutdown: _Optional[_Union[Shutdown, _Mapping]] = ..., evaluate_sweep_point: _Optional[_Union[EvaluateSweepPoint, _Mapping]] = ..., cancel_sweep: _Optional[_Union[CancelSweep, _Mapping]] = ..., run_export_job: _Optional[_Union[RunExportJob, _Mapping]] = ..., cancel_export_job: _Optional[_Union[CancelExportJob, _Mapping]] = ...) -> None: ...
 
 class CapabilityReport(_message.Message):
     __slots__ = ("protocol_version", "capabilities", "python_version", "interpreter", "machinewright_version", "cad_backend_version", "transports")
@@ -255,8 +295,58 @@ class EvaluationInputSchema(_message.Message):
     schema_json: bytes
     def __init__(self, session_id: _Optional[str] = ..., generation: _Optional[int] = ..., schema_json: _Optional[bytes] = ...) -> None: ...
 
+class ExportJobProgress(_message.Message):
+    __slots__ = ("session_id", "job_id", "stage", "completed", "total", "message")
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    JOB_ID_FIELD_NUMBER: _ClassVar[int]
+    STAGE_FIELD_NUMBER: _ClassVar[int]
+    COMPLETED_FIELD_NUMBER: _ClassVar[int]
+    TOTAL_FIELD_NUMBER: _ClassVar[int]
+    MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    session_id: str
+    job_id: int
+    stage: str
+    completed: int
+    total: int
+    message: str
+    def __init__(self, session_id: _Optional[str] = ..., job_id: _Optional[int] = ..., stage: _Optional[str] = ..., completed: _Optional[int] = ..., total: _Optional[int] = ..., message: _Optional[str] = ...) -> None: ...
+
+class ExportJobCompleted(_message.Message):
+    __slots__ = ("session_id", "job_id", "output_directory", "result_json")
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    JOB_ID_FIELD_NUMBER: _ClassVar[int]
+    OUTPUT_DIRECTORY_FIELD_NUMBER: _ClassVar[int]
+    RESULT_JSON_FIELD_NUMBER: _ClassVar[int]
+    session_id: str
+    job_id: int
+    output_directory: str
+    result_json: bytes
+    def __init__(self, session_id: _Optional[str] = ..., job_id: _Optional[int] = ..., output_directory: _Optional[str] = ..., result_json: _Optional[bytes] = ...) -> None: ...
+
+class ExportJobFailed(_message.Message):
+    __slots__ = ("session_id", "job_id", "code", "message", "traceback")
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    JOB_ID_FIELD_NUMBER: _ClassVar[int]
+    CODE_FIELD_NUMBER: _ClassVar[int]
+    MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    TRACEBACK_FIELD_NUMBER: _ClassVar[int]
+    session_id: str
+    job_id: int
+    code: str
+    message: str
+    traceback: str
+    def __init__(self, session_id: _Optional[str] = ..., job_id: _Optional[int] = ..., code: _Optional[str] = ..., message: _Optional[str] = ..., traceback: _Optional[str] = ...) -> None: ...
+
+class ExportJobCancelled(_message.Message):
+    __slots__ = ("session_id", "job_id")
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    JOB_ID_FIELD_NUMBER: _ClassVar[int]
+    session_id: str
+    job_id: int
+    def __init__(self, session_id: _Optional[str] = ..., job_id: _Optional[int] = ...) -> None: ...
+
 class WorkerEvent(_message.Message):
-    __slots__ = ("capabilities", "progress", "diagnostics", "completed", "failed", "cancelled", "sweep_point_completed", "sweep_point_failed", "sweep_point_cancelled", "input_schema")
+    __slots__ = ("capabilities", "progress", "diagnostics", "completed", "failed", "cancelled", "sweep_point_completed", "sweep_point_failed", "sweep_point_cancelled", "input_schema", "export_progress", "export_completed", "export_failed", "export_cancelled")
     CAPABILITIES_FIELD_NUMBER: _ClassVar[int]
     PROGRESS_FIELD_NUMBER: _ClassVar[int]
     DIAGNOSTICS_FIELD_NUMBER: _ClassVar[int]
@@ -267,6 +357,10 @@ class WorkerEvent(_message.Message):
     SWEEP_POINT_FAILED_FIELD_NUMBER: _ClassVar[int]
     SWEEP_POINT_CANCELLED_FIELD_NUMBER: _ClassVar[int]
     INPUT_SCHEMA_FIELD_NUMBER: _ClassVar[int]
+    EXPORT_PROGRESS_FIELD_NUMBER: _ClassVar[int]
+    EXPORT_COMPLETED_FIELD_NUMBER: _ClassVar[int]
+    EXPORT_FAILED_FIELD_NUMBER: _ClassVar[int]
+    EXPORT_CANCELLED_FIELD_NUMBER: _ClassVar[int]
     capabilities: CapabilityReport
     progress: EvaluationProgress
     diagnostics: PartialDiagnostics
@@ -277,4 +371,8 @@ class WorkerEvent(_message.Message):
     sweep_point_failed: SweepPointFailed
     sweep_point_cancelled: SweepPointCancelled
     input_schema: EvaluationInputSchema
-    def __init__(self, capabilities: _Optional[_Union[CapabilityReport, _Mapping]] = ..., progress: _Optional[_Union[EvaluationProgress, _Mapping]] = ..., diagnostics: _Optional[_Union[PartialDiagnostics, _Mapping]] = ..., completed: _Optional[_Union[EvaluationCompleted, _Mapping]] = ..., failed: _Optional[_Union[EvaluationFailed, _Mapping]] = ..., cancelled: _Optional[_Union[EvaluationCancelled, _Mapping]] = ..., sweep_point_completed: _Optional[_Union[SweepPointCompleted, _Mapping]] = ..., sweep_point_failed: _Optional[_Union[SweepPointFailed, _Mapping]] = ..., sweep_point_cancelled: _Optional[_Union[SweepPointCancelled, _Mapping]] = ..., input_schema: _Optional[_Union[EvaluationInputSchema, _Mapping]] = ...) -> None: ...
+    export_progress: ExportJobProgress
+    export_completed: ExportJobCompleted
+    export_failed: ExportJobFailed
+    export_cancelled: ExportJobCancelled
+    def __init__(self, capabilities: _Optional[_Union[CapabilityReport, _Mapping]] = ..., progress: _Optional[_Union[EvaluationProgress, _Mapping]] = ..., diagnostics: _Optional[_Union[PartialDiagnostics, _Mapping]] = ..., completed: _Optional[_Union[EvaluationCompleted, _Mapping]] = ..., failed: _Optional[_Union[EvaluationFailed, _Mapping]] = ..., cancelled: _Optional[_Union[EvaluationCancelled, _Mapping]] = ..., sweep_point_completed: _Optional[_Union[SweepPointCompleted, _Mapping]] = ..., sweep_point_failed: _Optional[_Union[SweepPointFailed, _Mapping]] = ..., sweep_point_cancelled: _Optional[_Union[SweepPointCancelled, _Mapping]] = ..., input_schema: _Optional[_Union[EvaluationInputSchema, _Mapping]] = ..., export_progress: _Optional[_Union[ExportJobProgress, _Mapping]] = ..., export_completed: _Optional[_Union[ExportJobCompleted, _Mapping]] = ..., export_failed: _Optional[_Union[ExportJobFailed, _Mapping]] = ..., export_cancelled: _Optional[_Union[ExportJobCancelled, _Mapping]] = ...) -> None: ...
