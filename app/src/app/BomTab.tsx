@@ -18,6 +18,7 @@ import {
   EMPTY_PROCUREMENT_DATA,
   ORDER_STATUSES,
   bomArtifactName,
+  mergeSynced,
   computeTotals,
   extendedCost,
   formatMoney,
@@ -133,6 +134,28 @@ export function BomTab({ projectId, projectRoot, outputDirectory, graphDigest, o
         setLoaded(true);
       });
   }, [projectRoot]);
+
+  // Prefill the file for this design (one blank, readable entry per purchased part, with its
+  // `needs`) — Python does it, so the app, the CLI and agents all see the same file. Whatever the
+  // user has typed meanwhile wins over the file.
+  useEffect(() => {
+    if (!graphDigest || !loaded) return;
+    const input = buildJobInput("bom_sourcing", outputDirectory, { project_root: projectRoot, action: "sync" }, exportStem(projectId));
+    if (!input) return;
+    let cancelled = false;
+    coordinator
+      .run(input, () => {})
+      .outcome.then(async (outcome) => {
+        if (outcome.kind !== "completed" || cancelled || !mounted.current) return;
+        const synced = parseProcurement(await readTextFile(procurementPath(projectRoot)).catch(() => ""));
+        if (!cancelled && mounted.current) setData((current) => mergeSynced(current, synced));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // Re-sync when the design changes, not on every render of the props.
+  }, [graphDigest, loaded, projectRoot]);
 
   // Only write once the file has been read (never clobber it with defaults) and only after real edits.
   const dirty = useRef(false);

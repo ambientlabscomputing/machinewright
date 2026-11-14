@@ -16,11 +16,13 @@ from machinewright.lib.bom import BOM
 from machinewright.lib.procurement import (
     OrderStatus,
     load_procurement,
+    part_name,
     resolve_line_id,
     save_procurement,
     short_id,
     sourcing_lines,
     sourcing_totals,
+    sync_procurement,
     update_entry,
     write_sourcing_csv,
 )
@@ -61,10 +63,9 @@ def list_lines(
     as_json: bool = typer.Option(False, "--json", help="Machine-readable output"),
 ) -> None:
     """List purchased BOM lines with their sourcing status."""
-    procurement = load_procurement(root)
-    lines = sourcing_lines(
-        _load_bom(root, bom_path), procurement, purchased_only=not all_parts
-    )
+    bom_data = _load_bom(root, bom_path)
+    procurement = sync_procurement(bom_data, load_procurement(root))
+    lines = sourcing_lines(bom_data, procurement, purchased_only=not all_parts)
     if unsourced:
         lines = [line for line in lines if not line.sourced]
     totals = sourcing_totals(lines)
@@ -83,7 +84,7 @@ def list_lines(
     for line in lines:
         price = "-" if line.entry.unit_cost is None else f"{line.entry.unit_cost:.2f}"
         typer.echo(
-            f"{short_id(line.line_id)}  {line.definition_id.rsplit('.', 1)[-1]:<28} "
+            f"{short_id(line.line_id)}  {part_name(line.definition_id):<28} "
             f"x{line.order_quantity:<4} {line.entry.status.value:<9} "
             f"{line.entry.supplier or '-':<14} {price:>9}  "
             f"{line.manufacturer} {line.part_number}".rstrip()
@@ -108,8 +109,9 @@ def set_entry(
     notes: str | None = None,
 ) -> None:
     """Record sourcing details for one BOM line (only the given fields change)."""
+    bom_data = _load_bom(root, bom_path)
     try:
-        full_id = resolve_line_id(_load_bom(root, bom_path), line_id)
+        full_id = resolve_line_id(bom_data, line_id)
     except KeyError as error:
         raise typer.BadParameter(str(error.args[0])) from error
     changes = {
@@ -127,8 +129,22 @@ def set_entry(
     }
     if not changes:
         raise typer.BadParameter("nothing to set — pass at least one field")
-    save_procurement(root, update_entry(load_procurement(root), full_id, **changes))
+    synced = sync_procurement(bom_data, load_procurement(root))
+    save_procurement(root, update_entry(synced, full_id, **changes))
     typer.echo(full_id)
+
+
+@bom.command("sync")
+def sync(root: Path = _Root, bom_path: Path | None = _BomPath) -> None:
+    """Prefill bom-procurement.json: one blank, readable entry per purchased part.
+
+    Existing sourcing data is kept. The app does this whenever the BOM tab opens.
+    """
+    bom_data = _load_bom(root, bom_path)
+    synced = sync_procurement(bom_data, load_procurement(root))
+    path = save_procurement(root, synced)
+    todo = sum(1 for line in sourcing_lines(bom_data, synced) if not line.sourced)
+    typer.echo(f"{path} — {todo} lines still need sourcing")
 
 
 @bom.command("export")
@@ -139,10 +155,9 @@ def export_csv(
     all_parts: bool = typer.Option(False, "--all", help="Include non-purchased parts"),
 ) -> None:
     """Write the purchased-parts BOM with sourcing details as CSV."""
+    bom_data = _load_bom(root, bom_path)
     procurement = load_procurement(root)
-    lines = sourcing_lines(
-        _load_bom(root, bom_path), procurement, purchased_only=not all_parts
-    )
+    lines = sourcing_lines(bom_data, procurement, purchased_only=not all_parts)
     location.parent.mkdir(parents=True, exist_ok=True)
     write_sourcing_csv(lines, location, procurement.currency)
     typer.echo(str(location))

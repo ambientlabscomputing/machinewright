@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -22,7 +22,9 @@ from machinewright.lib.printing.export import export_print_plan, plan_print
 from machinewright.lib.printing.profile import PlanSettings, PrinterProfile
 from machinewright.lib.procurement import (
     load_procurement,
+    save_procurement,
     sourcing_lines,
+    sync_procurement,
     write_sourcing_csv,
 )
 from machinewright.project import load_project
@@ -44,6 +46,8 @@ class BomSourcingOptions(BaseModel):
 
     # Project root holding bom-procurement.json.
     project_root: str
+    # "sync" prefills bom-procurement.json for the design; "csv" writes the sourcing CSV.
+    action: Literal["csv", "sync"] = "csv"
 
 
 class PrintPlanOptions(BaseModel):
@@ -106,11 +110,18 @@ def run_export_job(
         )
         return result.model_dump(mode="json")
     if kind == ExportJobKind.BOM_SOURCING:
+        sourcing = BomSourcingOptions.model_validate_json(options_json)
+        structured = generate_structured_bom(design.graph)
+        if sourcing.action == "sync":
+            synced = sync_procurement(
+                structured, load_procurement(sourcing.project_root)
+            )
+            save_procurement(sourcing.project_root, synced)
+            return {"lines": len(synced.context)}
         if destination is None:
             raise ValueError("BOM export requires a destination directory")
-        sourcing = BomSourcingOptions.model_validate_json(options_json)
         data = load_procurement(sourcing.project_root)
-        lines = sourcing_lines(generate_structured_bom(design.graph), data)
+        lines = sourcing_lines(structured, data)
         destination.mkdir(parents=True, exist_ok=True)
         target = destination / f"{basename}-purchased-parts.csv"
         write_sourcing_csv(lines, target, data.currency)

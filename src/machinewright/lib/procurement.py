@@ -19,9 +19,9 @@ import json
 import os
 from pathlib import Path
 import tempfile
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from machinewright.contracts import Contract
 from machinewright.lib.bom import BOM, BOMLineV1
@@ -58,13 +58,119 @@ class ProcurementEntry(Contract):
 EMPTY_ENTRY = ProcurementEntry()
 
 
+class LineContext(Contract):
+    """What a line is, copied from the BOM so the file reads on its own.
+
+    Derived data: refreshed by `sync_procurement` and never read back as input.
+    """
+
+    part: str
+    description: str = ""
+    quantity: int | None = None
+    instances: tuple[str, ...] = ()
+    material: str | None = None
+    manufacturer: str = ""
+    part_number: str = ""
+    in_design: bool = True
+
+
 class ProcurementFile(Contract):
     currency: str = "USD"
+    # Sourcing inputs, keyed by `BOMLineV1.line_id`.
     lines: dict[str, ProcurementEntry] = Field(default_factory=dict)
+    # Descriptions of those lines (derived; see `LineContext`).
+    context: dict[str, LineContext] = Field(default_factory=dict)
+
+
+# Fields an order needs before it can be placed, in the order a person fills them in.
+_REQUIRED = ("supplier", "sku", "unit_cost")
+_SETTLED = (OrderStatus.RECEIVED, OrderStatus.ON_HAND)
+
+
+def missing_fields(entry: ProcurementEntry, *, in_design: bool = True) -> list[str]:
+    """What is still needed to place this order; empty once sourced, bought, or no longer used."""
+    if not in_design or entry.status in _SETTLED:
+        return []
+    return [name for name in _REQUIRED if getattr(entry, name) in ("", None)]
+
+
+_INSTRUCTIONS = (
+    "Sourcing for this design's purchased parts. For each line whose `needs` is not empty, "
+    "fill in the fields it lists (supplier, sku, unit_cost; url and notes help), then set "
+    "`status` as the order progresses: to_order, ordered, received, on_hand. "
+    "part, description, quantity, instances, material, manufacturer, part_number, in_design "
+    "and needs are refreshed from the design automatically — edit the rest."
+)
+
+
+class ProcurementRecord(BaseModel):
+    """One line as written to disk: a readable header, derived context, then inputs."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    part: str
+    description: str = ""
+    needs: list[str] = Field(default_factory=list)
+    status: OrderStatus = OrderStatus.TO_ORDER
+    quantity: int | None = None
+    supplier: str = ""
+    sku: str = ""
+    url: str = ""
+    unit_cost: float | None = Field(default=None, ge=0)
+    spares: int = Field(default=0, ge=0)
+    notes: str = ""
+    instances: list[str] = Field(default_factory=list)
+    material: str | None = None
+    manufacturer: str = ""
+    part_number: str = ""
+    in_design: bool = True
+    line_id: str
+
+
+class ProcurementDocument(BaseModel):
+    """The shape of `bom-procurement.json`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["1.0"] = "1.0"
+    instructions: str = _INSTRUCTIONS
+    currency: str = "USD"
+    lines: list[ProcurementRecord] = Field(default_factory=list)
+
+
+_INPUT_FIELDS = ("supplier", "sku", "url", "unit_cost", "spares", "status", "notes")
 
 
 def procurement_path(project_root: str | Path) -> Path:
     return Path(project_root) / PROCUREMENT_FILE
+
+
+def parse_procurement(text: str) -> ProcurementFile:
+    """Parse the file's JSON. Also reads the earlier `{line_id: entry}` dict layout."""
+    raw = json.loads(text)
+    entries: dict[str, ProcurementEntry] = {}
+    context: dict[str, LineContext] = {}
+    rows = raw.get("lines", [])
+    if isinstance(rows, dict):  # earlier layout: no context
+        rows = [{"line_id": key, **value} for key, value in rows.items()]
+    for row in rows:
+        line_id = row["line_id"]
+        entries[line_id] = ProcurementEntry.model_validate(
+            {key: row[key] for key in (*_INPUT_FIELDS, "unitCost") if key in row},
+            strict=False,  # file values are JSON text (status is a string)
+        )
+        if "part" in row:
+            context[line_id] = LineContext.model_validate(
+                {
+                    key: row[key]
+                    for key in LineContext.model_fields
+                    if key in row and key != "schema_version"
+                },
+                strict=False,  # JSON arrays arrive as lists
+            )
+    return ProcurementFile(
+        currency=raw.get("currency", "USD"), lines=entries, context=context
+    )
 
 
 def load_procurement(project_root: str | Path) -> ProcurementFile:
@@ -72,21 +178,46 @@ def load_procurement(project_root: str | Path) -> ProcurementFile:
     path = procurement_path(project_root)
     if not path.exists():
         return ProcurementFile()
-    return ProcurementFile.model_validate_json(path.read_text(encoding="utf-8"))
+    return parse_procurement(path.read_text(encoding="utf-8"))
 
 
 def serialize_procurement(data: ProcurementFile) -> str:
-    """Stable, diff-friendly JSON: keys sorted, default-valued entries omitted."""
-    lines = {
-        key: entry.model_dump(mode="json", exclude={"schema_version"})
-        for key, entry in sorted(data.lines.items())
-        if not entry.is_empty
-    }
-    return (
-        json.dumps(
-            {"schema_version": "1.0", "currency": data.currency, "lines": lines},
-            indent=2,
+    """Readable, diff-friendly JSON: lines in use first, by part name.
+
+    Lines in the design are always written (blank ones are the to-do list);
+    lines that left the design are kept only when they hold sourcing data.
+    """
+    records = []
+    for line_id in sorted({*data.lines, *data.context}):
+        entry = data.lines.get(line_id, EMPTY_ENTRY)
+        ctx = data.context.get(line_id, LineContext(part=line_id.split(":")[-1][:12]))
+        if entry.is_empty and not (line_id in data.context and ctx.in_design):
+            continue
+        records.append(
+            ProcurementRecord(
+                part=ctx.part,
+                description=ctx.description,
+                needs=missing_fields(entry, in_design=ctx.in_design),
+                status=entry.status,
+                quantity=ctx.quantity,
+                supplier=entry.supplier,
+                sku=entry.sku,
+                url=entry.url,
+                unit_cost=entry.unit_cost,
+                spares=entry.spares,
+                notes=entry.notes,
+                instances=list(ctx.instances),
+                material=ctx.material,
+                manufacturer=ctx.manufacturer,
+                part_number=ctx.part_number,
+                in_design=ctx.in_design,
+                line_id=line_id,
+            )
         )
+    records.sort(key=lambda r: (not r.in_design, r.part, r.line_id))
+    document = ProcurementDocument(currency=data.currency, lines=records)
+    return (
+        json.dumps(document.model_dump(mode="json"), indent=2, ensure_ascii=False)
         + "\n"
     )
 
@@ -112,9 +243,56 @@ def update_entry(
     """Return `data` with `changes` merged into the entry for `line_id`."""
     current = data.lines.get(line_id, EMPTY_ENTRY)
     merged = ProcurementEntry.model_validate(
-        {**current.model_dump(mode="python"), **changes}
+        {**current.model_dump(mode="python"), **changes}, strict=False
     )
     return data.model_copy(update={"lines": {**data.lines, line_id: merged}})
+
+
+def part_name(definition_id: str) -> str:
+    """`parts.common.shim-5x8x0.25` -> `shim-5x8x0.25`: drop the module path, keep dotted names whole."""
+    segments = definition_id.split(".")
+    start = 0
+    while (
+        start < len(segments) - 1
+        and segments[start].isidentifier()
+        and segments[start].islower()
+    ):
+        start += 1
+    return ".".join(segments[start:])
+
+
+def line_context(line: BOMLineV1) -> LineContext:
+    return LineContext(
+        part=part_name(line.definition_id),
+        description=" · ".join(
+            f"{name}={value}"
+            for name, value in line.parameters.items()
+            if name != "definition_id" and isinstance(value, str | int | float | bool)
+        ),
+        quantity=int(line.quantity),
+        instances=tuple(node.rsplit("/", 1)[-1] for node in line.source_instances),
+        material=line.material,
+        manufacturer=(line.manufacturer_part or {}).get("manufacturer", ""),
+        part_number=(line.manufacturer_part or {}).get("part_number", ""),
+    )
+
+
+def sync_procurement(bom: BOM, data: ProcurementFile) -> ProcurementFile:
+    """Prefill: every purchased line gets an entry, and context follows the design.
+
+    Sourcing inputs already recorded are never touched. Lines that left the design
+    are marked `in_design: false`, not deleted.
+    """
+    current = {line.line_id: line for line in purchased_lines(bom)}
+    context = {
+        line_id: ctx.model_copy(update={"in_design": False})
+        for line_id, ctx in data.context.items()
+        if line_id not in current
+    }
+    for line_id, line in current.items():
+        context[line_id] = line_context(line)
+    lines = {**{line_id: EMPTY_ENTRY for line_id in current}, **data.lines}
+    return data.model_copy(update={"lines": lines, "context": context})
 
 
 # --- BOM x procurement ---------------------------------------------------------------
@@ -251,7 +429,7 @@ def write_sourcing_csv(
         for line in lines:
             writer.writerow(
                 {
-                    "part": line.definition_id.rsplit(".", 1)[-1],
+                    "part": part_name(line.definition_id),
                     "manufacturer": line.manufacturer,
                     "part_number": line.part_number,
                     "quantity": line.quantity,

@@ -1,0 +1,93 @@
+{
+  "schema_version": "1.0",
+  "instructions": "Sourcing for this design's purchased parts. For each line whose `needs` is not empty, fill in the fields it lists (supplier, sku, unit_cost; url and notes help), then set `status` as the order progresses: to_order, ordered, received, on_hand. part, description, quantity, instances, material, manufacturer, part_number, in_design and needs are refreshed from the design automatically — edit the rest.",
+  "currency": "USD",
+  "lines": [
+    {
+      "part": "Slab",
+      "description": "x=5 · y=5 · z=10",
+      "needs": [
+        "supplier",
+        "sku",
+        "unit_cost"
+      ],
+      "status": "to_order",
+      "quantity": 1,
+      "supplier": "",
+      "sku": "",
+      "url": "",
+      "unit_cost": null,
+      "spares": 0,
+      "notes": "",
+      "instances": [
+        "screw-a"
+      ],
+      "material": "Off-the-shelf hardware",
+      "manufacturer": "",
+      "part_number": "",
+      "in_design": true,
+      "line_id": "sha256:0cc0fa01376e301e72ef490afce7d950e9e66712c1c1cab168f2911891ff2211"
+    },
+    {
+      "part": "Slab",
+      "description": "x=8 · y=8 · z=4",
+      "needs": [],
+      "status": "ordered",
+      "quantity": 1,
+      "supplier": "McMaster",
+      "sku": "91290A115",
+      "url": "",
+      "unit_cost": 0.12,
+      "spares": 2,
+      "notes": "M3 x 8, pack of 100",
+      "instances": [
+        "nut"
+      ],
+      "material": "Off-the-shelf hardware",
+      "manufacturer": "",
+      "part_number": "",
+      "in_design": true,
+      "line_id": "sha256:3042f4554b5b2295952bcfc8ed2647400daae0d92ee59b23c8a68283d8cc7cae"
+    },
+    {
+      "part": "Slab",
+      "description": "x=6 · y=6 · z=10",
+      "needs": [],
+      "status": "received",
+      "quantity": 1,
+      "supplier": "Misumi",
+      "sku": "X-1",
+      "url": "",
+      "unit_cost": 1.5,
+      "spares": 0,
+      "notes": "",
+      "instances": [
+        "screw-b"
+      ],
+      "material": "Off-the-shelf hardware",
+      "manufacturer": "",
+      "part_number": "",
+      "in_design": true,
+      "line_id": "sha256:b262a889ea27604898af33c4c8d8ae73c4c59b4b7c4547237805332618bb18af"
+    },
+    {
+      "part": "old-bearing",
+      "description": "",
+      "needs": [],
+      "status": "to_order",
+      "quantity": 1,
+      "supplier": "Old Co",
+      "sku": "9",
+      "url": "",
+      "unit_cost": 1.25,
+      "spares": 0,
+      "notes": "",
+      "instances": [],
+      "material": null,
+      "manufacturer": "",
+      "part_number": "",
+      "in_design": false,
+      "line_id": "sha256:gone"
+    }
+  ]
+}

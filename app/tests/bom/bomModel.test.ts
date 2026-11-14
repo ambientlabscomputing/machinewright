@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   EMPTY_PROCUREMENT,
@@ -5,6 +7,7 @@ import {
   bomArtifactName,
   computeTotals,
   extendedCost,
+  missingFields,
   parseCanonicalBom,
   parseProcurement,
   serializeProcurement,
@@ -93,16 +96,30 @@ describe("procurement", () => {
   });
 });
 
-describe("procurement file format (shared with lib/procurement.py)", () => {
-  it("writes the Python schema: schema_version and snake_case unit_cost", () => {
-    const data = updateProcurement(EMPTY_PROCUREMENT_DATA, "sha256:a", { supplier: "McMaster", unitCost: 1.2, status: "ordered" });
-    expect(JSON.parse(serializeProcurement(data))).toEqual({
-      schema_version: "1.0",
-      currency: "USD",
-      lines: { "sha256:a": { supplier: "McMaster", sku: "", url: "", unit_cost: 1.2, spares: 0, status: "ordered", notes: "" } },
-    });
+describe("shared sample file", () => {
+  it("round-trips byte for byte, as Python's serializer writes it", () => {
+    const sample = readFileSync(resolve(__dirname, "../../../tests/fixtures/procurement_sample.json"), "utf8");
+    expect(serializeProcurement(parseProcurement(sample))).toBe(sample);
   });
 
+  it("computes what each line still needs", () => {
+    expect(missingFields(EMPTY_PROCUREMENT, true)).toEqual(["supplier", "sku", "unit_cost"]);
+    expect(missingFields({ ...EMPTY_PROCUREMENT, supplier: "x", sku: "y", unitCost: 1 }, true)).toEqual([]);
+    expect(missingFields(EMPTY_PROCUREMENT, false)).toEqual([]);
+    expect(missingFields({ ...EMPTY_PROCUREMENT, status: "received" }, true)).toEqual([]);
+  });
+});
+
+describe("procurement file format (shared with lib/procurement.py)", () => {
+  it("writes records: readable header first, line_id last, snake_case unit_cost", () => {
+    const data = updateProcurement(EMPTY_PROCUREMENT_DATA, "sha256:a", { supplier: "McMaster", unitCost: 1.2, status: "ordered" });
+    const document = JSON.parse(serializeProcurement(data));
+    expect(document.schema_version).toBe("1.0");
+    const [row] = document.lines;
+    expect(Object.keys(row)[0]).toBe("part");
+    expect(Object.keys(row).at(-1)).toBe("line_id");
+    expect(row).toMatchObject({ supplier: "McMaster", unit_cost: 1.2, status: "ordered", needs: ["sku"], line_id: "sha256:a" });
+  });
   it("reads files written by Python or by early app versions", () => {
     expect(parseProcurement(JSON.stringify({ lines: { k: { unit_cost: 2 } } })).lines.k?.unitCost).toBe(2);
     expect(parseProcurement(JSON.stringify({ lines: { k: { unitCost: 3 } } })).lines.k?.unitCost).toBe(3);

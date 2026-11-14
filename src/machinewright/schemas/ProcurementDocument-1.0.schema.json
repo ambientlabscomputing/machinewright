@@ -1,0 +1,164 @@
+{
+  "$defs": {
+    "OrderStatus": {
+      "enum": [
+        "to_order",
+        "ordered",
+        "received",
+        "on_hand"
+      ],
+      "title": "OrderStatus",
+      "type": "string"
+    },
+    "ProcurementRecord": {
+      "additionalProperties": false,
+      "description": "One line as written to disk: a readable header, derived context, then inputs.",
+      "properties": {
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "in_design": {
+          "default": true,
+          "title": "In Design",
+          "type": "boolean"
+        },
+        "instances": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Instances",
+          "type": "array"
+        },
+        "line_id": {
+          "title": "Line Id",
+          "type": "string"
+        },
+        "manufacturer": {
+          "default": "",
+          "title": "Manufacturer",
+          "type": "string"
+        },
+        "material": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Material"
+        },
+        "needs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Needs",
+          "type": "array"
+        },
+        "notes": {
+          "default": "",
+          "title": "Notes",
+          "type": "string"
+        },
+        "part": {
+          "title": "Part",
+          "type": "string"
+        },
+        "part_number": {
+          "default": "",
+          "title": "Part Number",
+          "type": "string"
+        },
+        "quantity": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quantity"
+        },
+        "sku": {
+          "default": "",
+          "title": "Sku",
+          "type": "string"
+        },
+        "spares": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Spares",
+          "type": "integer"
+        },
+        "status": {
+          "$ref": "#/$defs/OrderStatus",
+          "default": "to_order"
+        },
+        "supplier": {
+          "default": "",
+          "title": "Supplier",
+          "type": "string"
+        },
+        "unit_cost": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit Cost"
+        },
+        "url": {
+          "default": "",
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "part",
+        "line_id"
+      ],
+      "title": "ProcurementRecord",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The shape of `bom-procurement.json`.",
+  "properties": {
+    "currency": {
+      "default": "USD",
+      "title": "Currency",
+      "type": "string"
+    },
+    "instructions": {
+      "default": "Sourcing for this design's purchased parts. For each line whose `needs` is not empty, fill in the fields it lists (supplier, sku, unit_cost; url and notes help), then set `status` as the order progresses: to_order, ordered, received, on_hand. part, description, quantity, instances, material, manufacturer, part_number, in_design and needs are refreshed from the design automatically \u2014 edit the rest.",
+      "title": "Instructions",
+      "type": "string"
+    },
+    "lines": {
+      "items": {
+        "$ref": "#/$defs/ProcurementRecord"
+      },
+      "title": "Lines",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "title": "ProcurementDocument",
+  "type": "object"
+}

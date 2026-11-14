@@ -144,26 +144,40 @@ ordered / received / on hand), and notes; the tab totals units to buy and cost
 and exports a CSV. **Show in Viewport** selects a line's instances in the 3D view.
 
 Procurement data is saved in `bom-procurement.json` in the project root (schema:
-`schemas/ProcurementFile-1.0.schema.json`), so it can be committed with the design.
-It is keyed by the BOM line's `line_id` (a digest of part definition, revision, and
-parameters), so it survives unrelated edits; entries for parts that leave the
-design are kept in case they return. The **Export CSV** button runs the same code as
-the CLI below, in the worker.
+`schemas/ProcurementDocument-1.0.schema.json`), so it can be committed with the design.
+Opening the BOM tab **prefills it**: one record per purchased part, headed by a
+readable name and description, with a `needs` list naming what is still missing
+(`supplier`, `sku`, `unit_cost`). Fill those in (in the app, or by editing the file),
+and set `status` as the order progresses. A record looks like:
 
-The file and the merge with the BOM live in `lib/procurement.py`, shared by the app,
+```json
+{ "part": "bearing-6805", "description": "bore=25 · od=37", "needs": ["supplier", "sku", "unit_cost"],
+  "status": "to_order", "quantity": 2, "supplier": "", "sku": "", "url": "", "unit_cost": null,
+  "spares": 0, "notes": "", "instances": ["front-bearing-1", "front-bearing-2"], "in_design": true,
+  "line_id": "sha256:…" }
+```
+
+`part`, `description`, `quantity`, `instances`, `material`, `manufacturer`,
+`part_number`, `in_design` and `needs` are refreshed from the design; the rest is
+yours. Records are matched to the design by `line_id` (a digest of part definition,
+revision, and parameters), so sourcing survives unrelated edits; a part that leaves
+the design is kept with `in_design: false` in case it returns. **Export CSV** runs the
+same code as the CLI below, in the worker.
+
+The file and its merge with the BOM live in `lib/procurement.py`, shared by the app,
 the CLI, and agents. For scripting and sourcing work:
 
 ```bash
-machinewright bom list --unsourced --json     # purchased lines still missing a supplier or price
+machinewright bom sync                         # prefill bom-procurement.json (the app does this too)
+machinewright bom list --unsourced --json      # purchased lines still missing a supplier or price
 machinewright bom set 4702b31a22e0 --supplier McMaster --sku 91290A115 \
     --unit-cost 0.12 --spares 2 --status ordered
-machinewright bom export parts.csv            # BOM + sourcing as CSV
+machinewright bom export parts.csv             # BOM + sourcing as CSV
 ```
 
 Commands read the newest `.machinewright/output/assembly-*.bom.json` (or `--bom`),
-accept a unique prefix of a line id, and write the procurement file atomically. The
-app reads the file when the BOM tab opens, so reopen the tab after editing it
-externally.
+accept a unique prefix of a line id, and write the file atomically. The app reads
+the file when the BOM tab opens, so reopen the tab after editing it externally.
 
 Print planning rules:
 

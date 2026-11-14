@@ -118,12 +118,23 @@ export function parseCanonicalBom(source: string): readonly BomLine[] {
 
 // --- Procurement store ---------------------------------------------------------------
 
+/**
+ * What a line is (part name, quantity, where it is used…), written into the file by
+ * Python's `sync_procurement` so the file reads on its own. Derived data: kept verbatim
+ * here so saving never drops it, and never edited.
+ */
+export type LineContext = Readonly<Record<string, unknown>>;
+
 export interface ProcurementData {
   readonly currency: string;
+  /** Sourcing inputs, keyed by BOM `line_id`. */
   readonly lines: Readonly<Record<string, Procurement>>;
+  readonly context: Readonly<Record<string, LineContext>>;
+  /** The how-to-fill-this-in note Python writes at the top of the file. */
+  readonly instructions: string;
 }
 
-export const EMPTY_PROCUREMENT_DATA: ProcurementData = { currency: "USD", lines: {} };
+export const EMPTY_PROCUREMENT_DATA: ProcurementData = { currency: "USD", lines: {}, context: {}, instructions: "" };
 
 /** Lives in the project root so it can be committed alongside the design. */
 export const PROCUREMENT_FILE = "bom-procurement.json";
@@ -145,7 +156,17 @@ function normalize(raw: unknown): Procurement {
   return { supplier: text(r.supplier), sku: text(r.sku), url: text(r.url), unitCost: cost, spares, status, notes: text(r.notes) };
 }
 
-/** Tolerant parse: a missing, hand-edited or malformed file degrades to defaults field by field. */
+const CONTEXT_KEYS = ["part", "description", "quantity", "instances", "material", "manufacturer", "part_number", "in_design"] as const;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Tolerant parse: a missing, hand-edited or malformed file degrades to defaults field by field.
+ * Reads the record-list layout (`lines: [{ part, needs, supplier, …, line_id }]`) and the
+ * earlier `lines: { <line_id>: {…} }` layout.
+ */
 export function parseProcurement(source: string): ProcurementData {
   let raw: unknown;
   try {
@@ -153,29 +174,78 @@ export function parseProcurement(source: string): ProcurementData {
   } catch {
     return EMPTY_PROCUREMENT_DATA;
   }
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return EMPTY_PROCUREMENT_DATA;
-  const root = raw as Record<string, unknown>;
+  if (!isRecord(raw)) return EMPTY_PROCUREMENT_DATA;
   const lines: Record<string, Procurement> = {};
-  if (typeof root.lines === "object" && root.lines !== null && !Array.isArray(root.lines)) {
-    for (const [key, value] of Object.entries(root.lines)) lines[key] = normalize(value);
+  const context: Record<string, LineContext> = {};
+  const rows: [string, unknown][] = Array.isArray(raw.lines)
+    ? raw.lines.filter(isRecord).filter((row) => typeof row.line_id === "string").map((row) => [row.line_id as string, row])
+    : isRecord(raw.lines)
+      ? Object.entries(raw.lines)
+      : [];
+  for (const [key, row] of rows) {
+    lines[key] = normalize(row);
+    if (isRecord(row) && typeof row.part === "string") {
+      context[key] = Object.fromEntries(CONTEXT_KEYS.filter((name) => name in row).map((name) => [name, row[name]]));
+    }
   }
-  const currency = typeof root.currency === "string" && root.currency.trim() ? root.currency.trim() : EMPTY_PROCUREMENT_DATA.currency;
-  return { currency, lines };
+  const currency = typeof raw.currency === "string" && raw.currency.trim() ? raw.currency.trim() : EMPTY_PROCUREMENT_DATA.currency;
+  return { currency, lines, context, instructions: text(raw.instructions) };
+}
+
+/** What an order still needs, mirroring Python's `missing_fields` (a shared fixture test keeps them aligned). */
+export function missingFields(entry: Procurement, inDesign: boolean): string[] {
+  if (!inDesign || entry.status === "received" || entry.status === "on_hand") return [];
+  const missing: string[] = [];
+  if (entry.supplier === "") missing.push("supplier");
+  if (entry.sku === "") missing.push("sku");
+  if (entry.unitCost === null) missing.push("unit_cost");
+  return missing;
 }
 
 /**
- * Stable, diff-friendly output in the shared `ProcurementFile` schema (Python's `lib/procurement.py`
- * reads and writes the same file): keys sorted, entries equal to the defaults omitted.
+ * Stable, diff-friendly output in the shared `ProcurementDocument` layout (Python's
+ * `lib/procurement.py` reads and writes the same file): readable header first, lines in
+ * the design before departed ones, blank in-design lines kept as the to-do list.
  */
 export function serializeProcurement(data: ProcurementData): string {
-  const lines: Record<string, unknown> = {};
-  for (const key of Object.keys(data.lines).sort()) {
-    const entry = data.lines[key]!;
-    if (JSON.stringify(entry) === JSON.stringify(EMPTY_PROCUREMENT)) continue;
-    const { unitCost, ...rest } = entry;
-    lines[key] = { supplier: rest.supplier, sku: rest.sku, url: rest.url, unit_cost: unitCost, spares: rest.spares, status: rest.status, notes: rest.notes };
+  const records: Record<string, unknown>[] = [];
+  for (const lineId of new Set([...Object.keys(data.lines), ...Object.keys(data.context)])) {
+    const entry = data.lines[lineId] ?? EMPTY_PROCUREMENT;
+    const ctx = data.context[lineId];
+    const inDesign = ctx?.in_design !== false;
+    if (JSON.stringify(entry) === JSON.stringify(EMPTY_PROCUREMENT) && !(ctx && inDesign)) continue;
+    records.push({
+      part: ctx?.part ?? lineId.split(":").pop()?.slice(0, 12) ?? lineId,
+      description: ctx?.description ?? "",
+      needs: missingFields(entry, inDesign),
+      status: entry.status,
+      quantity: ctx?.quantity ?? null,
+      supplier: entry.supplier,
+      sku: entry.sku,
+      url: entry.url,
+      unit_cost: entry.unitCost,
+      spares: entry.spares,
+      notes: entry.notes,
+      instances: ctx?.instances ?? [],
+      material: ctx?.material ?? null,
+      manufacturer: ctx?.manufacturer ?? "",
+      part_number: ctx?.part_number ?? "",
+      in_design: inDesign,
+      line_id: lineId,
+    });
   }
-  return JSON.stringify({ schema_version: "1.0", currency: data.currency, lines }, null, 2) + "\n";
+  const rank = (record: Record<string, unknown>) => `${record.in_design ? 0 : 1}\u0000${String(record.part)}\u0000${String(record.line_id)}`;
+  records.sort((a, b) => (rank(a) < rank(b) ? -1 : rank(a) > rank(b) ? 1 : 0));
+  const document: Record<string, unknown> = { schema_version: "1.0" };
+  if (data.instructions) document.instructions = data.instructions;
+  document.currency = data.currency;
+  document.lines = records;
+  return JSON.stringify(document, null, 2) + "\n";
+}
+
+/** Adopt a freshly synced file's context and any new lines, keeping edits made in the meantime. */
+export function mergeSynced(current: ProcurementData, synced: ProcurementData): ProcurementData {
+  return { ...current, instructions: synced.instructions || current.instructions, context: synced.context, lines: { ...synced.lines, ...current.lines } };
 }
 
 export function procurementFor(data: ProcurementData, key: string): Procurement {

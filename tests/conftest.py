@@ -1,9 +1,6 @@
 import pytest
 
 from machinewright import registry
-from tests.test_export_jobs import (
-    mixed_design,  # noqa: F401 -- fixture shared with other test modules
-)
 
 
 @pytest.fixture
