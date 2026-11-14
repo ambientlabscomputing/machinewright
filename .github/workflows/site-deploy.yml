@@ -60,7 +60,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           # Replace with the custom domain once one is attached to the project.
-          SITE_URL: https://machinewright.pages.dev
+          SITE_URL: https://machinewright.ambientlabs.io
 
       - name: Deploy to Cloudflare Pages
         working-directory: site
