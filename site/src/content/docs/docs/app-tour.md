@@ -5,7 +5,7 @@ description: A guided look at the Machinewright editor, viewport, inputs and dia
 
 The Machinewright app opens a project folder, evaluates it through the project's Python worker, and shows the result live. These screenshots use the *ironless-actuator* sample project.
 
-![The Machinewright workspace with the ironless-actuator project open](../../../assets/screens/workspace-assembled-full.jpg)
+![The Machinewright workspace with the ironless-actuator project open](../../../assets/screens/workspace.jpg)
 
 ## The workspace
 
@@ -20,15 +20,19 @@ The editor evaluates unsaved changes and keeps the last valid snapshot visible i
 
 ## Assembled and exploded views
 
-![The assembled actuator in the viewport](../../../assets/screens/viewport-assembled.jpg)
+![The exploded actuator with the parts list grouped into printed and purchased parts](../../../assets/screens/exploded.jpg)
 
-![The exploded actuator in the viewport](../../../assets/screens/viewport-exploded.jpg)
-
-The exploded view separates parts so you can check fit and assembly order. Use the part-count control to isolate groups, and click **Show all** to restore everything.
+The exploded view separates parts so you can check fit and assembly order. In the maximized viewport, the parts list groups parts into *Printed* and *Purchased*; untick a part or group to hide it, and click **Show all** to restore everything.
 
 ## Other tabs
 
 - **3D Print** is a full-window view of your printer's bed. Configure the printer, **Generate Plates**, and **Export STLs…** for your slicer. See [3D printing plates](/docs/guides/3d-printing/).
+
+  ![The 3D Print tab with printed gears laid out on a plate](../../../assets/screens/print-plates.jpg)
+
 - **BOM** lists purchased parts with supplier, SKU, cost and order status. See [BOM and procurement](/docs/guides/bom-and-procurement/).
+
+  ![The BOM tab with purchased parts for ironless-actuator](../../../assets/screens/bom.jpg)
+
 - **Export** (`Cmd+Shift+E`) saves STEP or STL for the whole assembly or for selected parts. See [Exporting artifacts](/docs/guides/exporting-artifacts/).
 - **Commands** opens the command palette.

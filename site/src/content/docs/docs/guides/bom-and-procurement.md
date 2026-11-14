@@ -3,6 +3,8 @@ title: BOM and procurement
 description: Track suppliers, SKUs, costs and order status for purchased parts.
 ---
 
+![The BOM tab with the ironless-actuator project](../../../../assets/screens/bom.jpg)
+
 The **BOM** tab shows the design's purchased parts (material process `PURCHASED`). The lines are Machinewright's own BOM, the `bom.json` every evaluation writes, so grouping, quantities and manufacturer identity match `machinewright export bom` exactly.
 
 For each line you can record supplier, SKU, product link, unit cost, spares, order status (*to order*, *ordered*, *received*, *on hand*) and notes. The tab totals units to buy and cost, and exports a CSV. **Show in Viewport** selects a line's instances in the 3D view.

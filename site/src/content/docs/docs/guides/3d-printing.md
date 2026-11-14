@@ -3,6 +3,8 @@ title: 3D printing plates
 description: Plan print plates for printed parts and export STLs for your slicer.
 ---
 
+![The 3D Print tab with the ironless-actuator project](../../../../assets/screens/print-plates.jpg)
+
 The **3D Print** tab is a full-window view of your printer's bed. Printer settings and **Generate Plates** are on the left, the plate list on the right. A progress bar follows orienting, packing and writing, and each plate appears the moment its STL is written. **Export STLs…** copies the set to a folder you choose.
 
 Machinewright does not slice or generate G-code.
