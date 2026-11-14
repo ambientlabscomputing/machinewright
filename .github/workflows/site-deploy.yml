@@ -1,0 +1,75 @@
+name: Machinewright Site Deploy
+
+# Deploy the public site to Cloudflare Pages whenever a version tag is pushed,
+# the same trigger as the macOS app release. The release workflow publishes the
+# GitHub release the downloads page lists, so this job waits for the DMG asset
+# to exist before building.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Wait for the macOS release assets
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The release workflow attaches the DMG about 10-40 minutes after the tag.
+          for i in $(seq 1 80); do
+            if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets \
+                 --jq '.assets[].name' 2>/dev/null | grep -q '\.dmg$'; then
+              echo "Release $TAG has its DMG"; exit 0
+            fi
+            echo "Waiting for $TAG release assets ($i/80)..."; sleep 60
+          done
+          echo "::warning::No DMG found for $TAG; building with the assets available."
+
+      - name: Regenerate API reference
+        run: uv run --with griffe python site/scripts/generate_api_docs.py
+
+      - run: npm ci
+        working-directory: site
+
+      - run: npm run build
+        working-directory: site
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          # Replace with the custom domain once one is attached to the project.
+          SITE_URL: https://machinewright.pages.dev
+
+      - name: Deploy to Cloudflare Pages
+        working-directory: site
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx wrangler pages deploy dist \
+            --project-name machinewright \
+            --branch main \
+            --commit-hash "$GITHUB_SHA" \
+            --commit-message "Release $TAG"
